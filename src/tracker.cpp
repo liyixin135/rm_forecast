@@ -30,8 +30,8 @@ namespace rm_forecast
         /***replace the distance with confidence***/
         for (const auto & armor : msg.detections) {
 
-            if (armor.confidence < min_distance) {
-                min_distance = armor.confidence;
+            if (armor.distance_to_image_center < min_distance) {
+                min_distance = armor.distance_to_image_center;
                 chosen_armor = armor;
             }
         }

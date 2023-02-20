@@ -60,9 +60,11 @@ add_library(
         src/forecast_node.cpp
         src/kalman_filter.cpp
         src/tracker.cpp
+        src/spin_observer.cpp
         include/kalman_filter.h
         include/forecast_node.h
         include/tracker.h
+        include/spin_observer.h
 )
 
 target_link_libraries(

@@ -6,6 +6,7 @@
 
 #include "kalman_filter.h"
 #include "tracker.h"
+#include "spin_observer.h"
 #include <Eigen/Core>
 #include <Eigen/Eigen>
 #include <XmlRpcValue.h>
@@ -34,6 +35,9 @@ namespace rm_forecast {
 static double max_match_distance_{};
 static int tracking_threshold_{};
 static int lost_threshold_{};
+    static double max_jump_angle_{};
+    static double max_jump_period_{};
+    static double allow_following_range_{};
 
 class Forecast_Node : public nodelet::Nodelet {
 public:
@@ -74,9 +78,35 @@ private:
   std::unique_ptr<Tracker> tracker_;
   bool tracking_{};
 
+  //Spin observer
+  std::unique_ptr<SpinObserver> spin_observer_;
+  bool allow_spin_observer_ = true;
+
   void forecastconfigCB(rm_forecast::ForecastConfig &config, uint32_t level);
 
   void speedCallback(const rm_msgs::TargetDetectionArray::Ptr &msg);
+
+  void outpostCallback(const rm_msgs::TargetDetectionArray::Ptr &msg);
+  bool forecast_readied_ = false;
+  bool reset_ = false;
+  bool init_flag_ = false;
+  bool fitting_succeeded_ = false;
+  int target_quantity_ = 0;
+  int min_target_quantity_ = 100;
+  double line_speed_ = 0.8;
+  double z_c_ = 0.5;
+    double outpost_radius_ = 0.35;
+    double rotate_speed_ = 0.5;
+    bool circle_suggest_fire_ = false;
+    double fly_time_ = 0.5;
+    double y_thred_ = 0.05;
+    ros::Time last_min_time_;
+  double max_x_ = 0, min_x_ = 0, min_distance_ = 0;
+  rm_msgs::TargetDetectionArray max_x_target_;
+  rm_msgs::TargetDetectionArray min_x_target_;
+    rm_msgs::TargetDetectionArray min_distance_target_;
+  ros::Time min_x_time_;
+  double theta_b_;
 
   std::thread my_thread_;
   image_transport::Publisher image_pub_;
