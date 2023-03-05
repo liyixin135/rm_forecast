@@ -5,8 +5,9 @@
 #pragma once
 
 #include "kalman_filter.h"
-#include "tracker.h"
+#include "rm_common/ori_tool.h"
 #include "spin_observer.h"
+#include "tracker.h"
 #include <Eigen/Core>
 #include <Eigen/Eigen>
 #include <XmlRpcValue.h>
@@ -35,13 +36,12 @@ namespace rm_forecast {
 static double max_match_distance_{};
 static int tracking_threshold_{};
 static int lost_threshold_{};
-    static double max_jump_angle_{};
-    static double max_jump_period_{};
-    static double allow_following_range_{};
+static double max_jump_angle_{};
+static double max_jump_period_{};
+static double allow_following_range_{};
 
 class Forecast_Node : public nodelet::Nodelet {
 public:
-
   Forecast_Node() = default;
 
   ~Forecast_Node() override {
@@ -59,11 +59,12 @@ private:
   ros::Publisher track_pub_;
   ros::NodeHandle nh_;
   std::shared_ptr<image_transport::ImageTransport> it_;
-  dynamic_reconfigure::Server<rm_forecast::ForecastConfig>*forecast_cfg_srv_{};
-  dynamic_reconfigure::Server<rm_forecast::ForecastConfig>::CallbackType forecast_cfg_cb_;
+  dynamic_reconfigure::Server<rm_forecast::ForecastConfig> *forecast_cfg_srv_{};
+  dynamic_reconfigure::Server<rm_forecast::ForecastConfig>::CallbackType
+      forecast_cfg_cb_;
 
   // transform
- //  std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
+  //  std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
   tf2_ros::TransformListener *tf_listener_;
   tf2_ros::Buffer *tf_buffer_;
 
@@ -78,7 +79,7 @@ private:
   std::unique_ptr<Tracker> tracker_;
   bool tracking_{};
 
-  //Spin observer
+  // Spin observer
   std::unique_ptr<SpinObserver> spin_observer_;
   bool allow_spin_observer_ = true;
 
@@ -87,6 +88,11 @@ private:
   void speedCallback(const rm_msgs::TargetDetectionArray::Ptr &msg);
 
   void outpostCallback(const rm_msgs::TargetDetectionArray::Ptr &msg);
+  geometry_msgs::Pose
+  computeCircleCenter(const rm_msgs::TargetDetection point_1,
+                      const rm_msgs::TargetDetection point_2,
+                      const rm_msgs::TargetDetection point_3,
+                      const rm_msgs::TargetDetection point_4);
   bool forecast_readied_ = false;
   bool reset_ = false;
   bool init_flag_ = false;
@@ -95,21 +101,25 @@ private:
   int min_target_quantity_ = 100;
   double line_speed_ = 0.8;
   double z_c_ = 0.5;
-    double outpost_radius_ = 0.35;
-    double rotate_speed_ = 0.5;
-    bool circle_suggest_fire_ = false;
-    double fly_time_ = 0.5;
-    double y_thred_ = 0.05;
-    ros::Time last_min_time_;
+  double outpost_radius_ = 0.35;
+  double rotate_speed_ = 0.5;
+  bool circle_suggest_fire_ = false;
+  double time_offset_ = 0.53;
+  double fly_time_ = 0.5;
+  double y_thred_ = 0.05;
+  double x_thred_ = 0.05;
+  ros::Time last_min_time_;
   double max_x_ = 0, min_x_ = 0, min_distance_ = 0;
   rm_msgs::TargetDetectionArray max_x_target_;
   rm_msgs::TargetDetectionArray min_x_target_;
-    rm_msgs::TargetDetectionArray min_distance_target_;
-  ros::Time min_x_time_;
+  rm_msgs::TargetDetection target_[4]{};
+  rm_msgs::TargetDetectionArray min_distance_target_;
+  ros::Time min_x_time_, last_get_target_time_;
   double theta_b_;
-
+  int count_{};
   std::thread my_thread_;
   image_transport::Publisher image_pub_;
+  double fly_time;
 };
 
 } // namespace rm_forecast
