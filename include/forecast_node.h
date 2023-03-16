@@ -9,6 +9,10 @@
 #include "spin_observer.h"
 #include <Eigen/Core>
 #include <Eigen/Eigen>
+#include <Eigen/Dense>
+#include <opencv2/core/eigen.hpp>
+#include <opencv2/calib3d.hpp>
+#include <opencv2/core.hpp>
 #include <XmlRpcValue.h>
 #include <cmath>
 #include <cv_bridge/cv_bridge.h>
@@ -80,13 +84,15 @@ private:
 
   //Spin observer
   std::unique_ptr<SpinObserver> spin_observer_;
-  bool allow_spin_observer_ = true;
+  bool allow_spin_observer_ = false;
 
   void forecastconfigCB(rm_forecast::ForecastConfig &config, uint32_t level);
 
   void speedCallback(const rm_msgs::TargetDetectionArray::Ptr &msg);
 
-  void outpostCallback(const rm_msgs::TargetDetectionArray::Ptr &msg);
+
+
+    void outpostCallback(const rm_msgs::TargetDetectionArray::Ptr &msg);
   bool forecast_readied_ = false;
   bool reset_ = false;
   bool init_flag_ = false;
@@ -101,15 +107,32 @@ private:
     double fly_time_ = 0.5;
     double y_thred_ = 0.05;
     ros::Time last_min_time_;
-  double max_x_ = 0, min_x_ = 0, min_distance_ = 0;
-  rm_msgs::TargetDetectionArray max_x_target_;
-  rm_msgs::TargetDetectionArray min_x_target_;
+  double max_y_ = 0, min_y_ = 0, min_distance_ = 0;
+  rm_msgs::TargetDetectionArray max_y_target_;
+  rm_msgs::TargetDetectionArray min_y_target_;
     rm_msgs::TargetDetectionArray min_distance_target_;
-  ros::Time min_x_time_;
+  ros::Time min_y_time_;
   double theta_b_;
 
   std::thread my_thread_;
   image_transport::Publisher image_pub_;
+
+  ///draw reproject
+  cv::Point2f reproject(Eigen::Vector3d &xyz);
+
+    void drawCallback(const sensor_msgs::ImageConstPtr& img);
+
+    template<typename T>
+    bool initMatrix(Eigen::MatrixXd &matrix,std::vector<T> &vector);
+
+    ros::Subscriber draw_sub_;
+    image_transport::Publisher draw_pub_;
+
+    bool is_reproject_;
+    double re_fly_time_;
+    cv::Mat m_intrinsic_;
+    cv::Point2f target2d_{};
+
 };
 
 } // namespace rm_forecast

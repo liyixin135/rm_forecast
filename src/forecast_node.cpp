@@ -6,6 +6,7 @@
 #include <pluginlib/class_list_macros.h>
 #include <ros/callback_queue.h>
 
+using namespace cv;
 using namespace std;
 
 PLUGINLIB_EXPORT_CLASS(rm_forecast::Forecast_Node, nodelet::Nodelet)
@@ -91,11 +92,29 @@ void Forecast_Node::initialize(ros::NodeHandle &nh) {
 
   tf_buffer_ = new tf2_ros::Buffer(ros::Duration(10));
   tf_listener_ = new tf2_ros::TransformListener(*tf_buffer_);
-//  targets_sub_ =
-//      nh.subscribe("/detection", 1, &Forecast_Node::speedCallback, this);
-    targets_sub_ =
-            nh.subscribe("/detection", 1, &Forecast_Node::outpostCallback, this);
+  targets_sub_ =
+      nh.subscribe("/detection", 1, &Forecast_Node::speedCallback, this);
+//    targets_sub_ =
+//            nh.subscribe("/detection", 1, &Forecast_Node::outpostCallback, this);
   track_pub_ = nh.advertise<rm_msgs::TrackData>("/track", 10);
+
+    std::vector<float> intrinsic;
+    std::vector<float> distortion;
+    if(!nh.getParam("/forecast/camera_matrix/data", intrinsic))
+        ROS_WARN("No cam_intrinsic_mat_k specified");
+    if(!nh.getParam("/forecast/distortion_coefficients/data", distortion))
+        ROS_WARN("No distortion specified");
+    if(!nh.getParam("is_reproject", is_reproject_))
+        ROS_WARN("No is_reproject specified");
+    if(!nh.getParam("re_fly_time", re_fly_time_))
+        ROS_WARN("No re_fly_time specified");
+
+    Eigen::MatrixXd mat_intrinsic(3, 3);
+    initMatrix(mat_intrinsic,intrinsic);
+    eigen2cv(mat_intrinsic,m_intrinsic_);
+
+    draw_sub_ = nh.subscribe("/galaxy_camera/image_raw", 1, &Forecast_Node::drawCallback, this);
+    draw_pub_ = it_->advertise("reproject_image", 1);
 }
 
 void Forecast_Node::forecastconfigCB(rm_forecast::ForecastConfig &config,
@@ -122,11 +141,15 @@ void Forecast_Node::forecastconfigCB(rm_forecast::ForecastConfig &config,
     y_thred_ = config.y_thred;
     fly_time_ = config.fly_time;
 
+    ///reproject
+    is_reproject_ = config.is_reproject;
+    re_fly_time_ = config.re_fly_time;
+
 }
 
 void Forecast_Node::outpostCallback(const rm_msgs::TargetDetectionArray::Ptr &msg) {
     rm_msgs::TrackData track_data;
-    track_data.header.frame_id = "base_link";
+    track_data.header.frame_id = "odom";
     track_data.header.stamp = target_array_.header.stamp;
     track_data.id = 0;
 
@@ -149,7 +172,7 @@ void Forecast_Node::outpostCallback(const rm_msgs::TargetDetectionArray::Ptr &ms
         try
         {
             geometry_msgs::TransformStamped transform = tf_buffer_->lookupTransform(
-                    "base_link", pose_in.header.frame_id, msg->header.stamp, ros::Duration(1));
+                    "odom", pose_in.header.frame_id, msg->header.stamp, ros::Duration(1));
 
             tf2::doTransform(pose_in.pose, pose_out.pose, transform);
         }
@@ -173,33 +196,33 @@ void Forecast_Node::outpostCallback(const rm_msgs::TargetDetectionArray::Ptr &ms
             init_flag_ = false;
             fitting_succeeded_ = false;
             target_quantity_ = 0;
-            min_x_ = 0;
-            max_x_ = 0;
+            min_y_ = 0;
+            max_y_ = 0;
             min_distance_ = 0;
         }
 
         if(!init_flag_){
             init_flag_ = true;
             fitting_succeeded_ = false;
-            max_x_target_ = target_array_;
-            min_x_target_ = target_array_;
+            max_y_target_ = target_array_;
+            min_y_target_ = target_array_;
             min_distance_target_ = target_array_;
             return;
         }
         ROS_INFO("fitting%d", fitting_succeeded_);
         if(!fitting_succeeded_){
-            if((abs(target_array_.detections[0].pose.position.y - min_x_) > 0.55) || (abs(target_array_.detections[0].pose.position.y - max_x_) > 0.55)){
+            if((abs(target_array_.detections[0].pose.position.y - min_y_) > 0.55) || (abs(target_array_.detections[0].pose.position.y - max_y_) > 0.55)){
                 return;
             }
 
-            if(target_array_.detections[0].pose.position.y > max_x_){
-                max_x_ = target_array_.detections[0].pose.position.y;
-                max_x_target_ = target_array_;
+            if(target_array_.detections[0].pose.position.y > max_y_){
+                max_y_ = target_array_.detections[0].pose.position.y;
+                max_y_target_ = target_array_;
             }
 
-            if(target_array_.detections[0].pose.position.y < min_x_){
-                min_x_ = target_array_.detections[0].pose.position.y;
-                min_x_target_ = target_array_;
+            if(target_array_.detections[0].pose.position.y < min_y_){
+                min_y_ = target_array_.detections[0].pose.position.y;
+                min_y_target_ = target_array_;
             }
 
             if(target_array_.detections[0].pose.position.x < min_distance_){
@@ -214,17 +237,17 @@ void Forecast_Node::outpostCallback(const rm_msgs::TargetDetectionArray::Ptr &ms
         double theta_b, delta_theta;
         if(target_quantity_ > min_target_quantity_){
             fitting_succeeded_ = true;
-            ROS_INFO("max_x_ - min_x_:%f", (max_x_ - min_x_));
+            ROS_INFO("max_y_ - min_y_:%f", (max_y_ - min_y_));
             ROS_INFO("outpost_radius_:%f", outpost_radius_);
-            double theta_a = 2 * asin(0.5 * (max_x_ - min_x_) / outpost_radius_);
+            double theta_a = 2 * asin(0.5 * (max_y_ - min_y_) / outpost_radius_);
             theta_b = 0.5 * (3.14 - theta_a);
             double offset_y = -(outpost_radius_ * sin(theta_b_));
-            min_x_time_ = min_x_target_.header.stamp;
-            double theta_c = (target_array_.header.stamp - min_x_time_).toSec() * rotate_speed_;
+            min_y_time_ = min_y_target_.header.stamp;
+            double theta_c = (target_array_.header.stamp - min_y_time_).toSec() * rotate_speed_;
 //            x_c = -(outpost_radius_ * cos(theta_b_ + theta_c));
 //            y_c = offset_y - (-(outpost_radius_ * sin(theta_b_ + theta_c)));
             ROS_INFO("outpost_radius_:%f", outpost_radius_);
-            double offset = 0.5 * (max_x_ + min_x_);
+            double offset = 0.5 * (max_y_ + min_y_);
             double amend_c = -target_array_.detections[0].pose.position.y + offset;
             delta_theta = acos(amend_c / outpost_radius_) - theta_b;
             ROS_INFO("fitting successed. theta_a:%f, theta_b:%f, delta_t:%f, offset:%f", theta_a, theta_b, delta_theta, offset);
@@ -314,7 +337,7 @@ void Forecast_Node::outpostCallback(const rm_msgs::TargetDetectionArray::Ptr &ms
 //        track_data.target_vel.z = 0;
     }
     else{
-        track_data.id = 6;
+        track_data.id = 3;
         track_data.target_pos.x = target_array_.detections[0].pose.position.x;
         track_data.target_pos.y = target_array_.detections[0].pose.position.y;
         track_data.target_pos.z = target_array_.detections[0].pose.position.z;
@@ -329,9 +352,13 @@ void Forecast_Node::outpostCallback(const rm_msgs::TargetDetectionArray::Ptr &ms
 
 void Forecast_Node::speedCallback(
     const rm_msgs::TargetDetectionArray::Ptr &msg) {
-  if (msg->detections.empty()) {
-    ROS_INFO("no target!");
-    return;
+    rm_msgs::TrackData track_data;
+    track_data.header.stamp = msg->header.stamp; //??
+
+    if (msg->detections.empty()) {
+      track_data.id = 0;
+      track_pub_.publish(track_data);
+      return;
   }
 
    //Tranform armor position from image frame to world coordinate
@@ -366,7 +393,7 @@ void Forecast_Node::speedCallback(
     target_array_.detections.emplace_back(detection_temp);
   }
 
-  rm_msgs::TrackData track_data;
+
 
   /***如果是丢失状态则初始化tracker***/
   if (tracker_->tracker_state == Tracker::LOST) {
@@ -402,7 +429,6 @@ void Forecast_Node::speedCallback(
     //            target_msg.velocity.y = tracker_->target_state(4);
     //            target_msg.velocity.z = tracker_->target_state(5);
     track_data.header.frame_id = "odom";
-    track_data.header.stamp = msg->header.stamp; //??
     track_data.id = tracker_->tracking_id;
     track_data.target_pos.x = tracker_->target_state(0);
     track_data.target_pos.y = tracker_->target_state(1);
@@ -423,6 +449,82 @@ void Forecast_Node::speedCallback(
     }
 
   track_pub_.publish(track_data);
+
+    if(!is_reproject_)
+        return;
+    /***draw reproject***/
+    track_data.target_pos.x += track_data.target_vel.x * re_fly_time_;
+    track_data.target_pos.y += track_data.target_vel.y * re_fly_time_;
+    track_data.target_pos.z += track_data.target_vel.z * re_fly_time_;
+
+    rm_msgs::TargetDetection detection_temp;
+    geometry_msgs::PoseStamped pose_in;
+    geometry_msgs::PoseStamped pose_out;
+    pose_in.header.frame_id = "odom";
+    pose_in.header.frame_id = msg->header.frame_id;
+    pose_in.pose.position.x = track_data.target_pos.x;
+    pose_in.pose.position.y = track_data.target_pos.y;
+    pose_in.pose.position.z = track_data.target_pos.z;
+
+    try
+    {
+        geometry_msgs::TransformStamped transform = tf_buffer_->lookupTransform(
+                "camera_optical_frame", pose_in.header.frame_id, msg->header.stamp, ros::Duration(1));
+
+        tf2::doTransform(pose_in.pose, pose_out.pose, transform);
+    }
+    catch (tf2::TransformException &ex)
+    {
+        ROS_WARN("%s", ex.what());
+    }
+//    ROS_INFO_STREAM(pose_out.pose.position.x
+//                    << ",y:" << pose_out.pose.position.y
+//                    << ",z:" << pose_out.pose.position.z);
+
+    detection_temp.pose = pose_out.pose;
+    Eigen::Vector3d hit_point_cam = {detection_temp.pose.position.x, detection_temp.pose.position.y, detection_temp.pose.position.z};
+    target2d_ = reproject(hit_point_cam);
+//    std::cout << "target2d = \n" << target2d_ << std::endl;
+
 }
+
+    /**
+    * @brief 重投影
+    *
+    * @param xyz 目标三维坐标
+    * @return cv::Point2f 图像坐标系上坐标(x,y)
+    */
+    cv::Point2f Forecast_Node::reproject(Eigen::Vector3d &xyz)
+    {
+        Eigen::Matrix3d mat_intrinsic;
+        cv2eigen(m_intrinsic_, mat_intrinsic);
+        //(u,v,1)^T = (1/Z) * K * (X,Y,Z)^T
+        auto result = (1.f / xyz[2]) * mat_intrinsic * (xyz);//解算前进行单位转换
+        return cv::Point2f(result[0], result[1]);
+    }
+
+    void Forecast_Node::drawCallback(const sensor_msgs::ImageConstPtr& img){
+        if(!is_reproject_)
+            return;
+
+        cv::Mat origin_img = cv_bridge::toCvShare(img, "bgr8")->image;
+        circle(origin_img, target2d_, 10, cv::Scalar(0, 0, 255), -1, 2);
+        draw_pub_.publish(cv_bridge::CvImage(std_msgs::Header(), "bgr8", origin_img).toImageMsg());
+    }
+
+    template<typename T>
+    bool Forecast_Node::initMatrix(Eigen::MatrixXd &matrix,std::vector<T> &vector)
+    {
+        int cnt = 0;
+        for(int row = 0;row < matrix.rows();row++)
+        {
+            for(int col = 0;col < matrix.cols();col++)
+            {
+                matrix(row,col) = vector[cnt];
+                cnt++;
+            }
+        }
+        return true;
+    }
 
 } // namespace rm_forecast
