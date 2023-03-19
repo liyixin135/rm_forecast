@@ -5,6 +5,7 @@
 #pragma once
 
 #include "kalman_filter.h"
+#include "rm_common/linear_interpolation.h"
 #include "rm_common/ori_tool.h"
 #include "spin_observer.h"
 #include "tracker.h"
@@ -24,6 +25,7 @@
 #include <rm_msgs/TargetDetectionArray.h>
 #include <rm_msgs/TrackData.h>
 #include <ros/ros.h>
+#include <std_msgs/Float64.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <tf2_ros/message_filter.h>
 #include <tf2_ros/transform_listener.h>
@@ -56,6 +58,7 @@ public:
 private:
   rm_msgs::TargetDetectionArray target_array_;
   ros::Subscriber targets_sub_;
+  ros::Subscriber fly_time_sub_;
   ros::Publisher track_pub_;
   ros::NodeHandle nh_;
   std::shared_ptr<image_transport::ImageTransport> it_;
@@ -88,6 +91,7 @@ private:
   void speedCallback(const rm_msgs::TargetDetectionArray::Ptr &msg);
 
   void outpostCallback(const rm_msgs::TargetDetectionArray::Ptr &msg);
+  void flyTimeCB(const std_msgs::Float64ConstPtr &msg);
   geometry_msgs::Pose
   computeCircleCenter(const rm_msgs::TargetDetection point_1,
                       const rm_msgs::TargetDetection point_2,
@@ -119,7 +123,8 @@ private:
   int count_{};
   std::thread my_thread_;
   image_transport::Publisher image_pub_;
-  double fly_time;
+  rm_common::LinearInterp interpolation_fly_time_;
+  double bullet_solver_fly_time_{};
 };
 
 } // namespace rm_forecast

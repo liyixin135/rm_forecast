@@ -6,3 +6,8 @@ max_jump_period: 0.8
 allow_following_range: 0.3
 y_thred: 0.03
 fly_time: 500
+interpolation_fly_time:
+  - [ 3.5,0.40 ]
+  - [ 4.0,0.366666 ]
+  - [ 4.5,0.337 ]
+  - [ 5.0,0.30 ]

@@ -83,6 +83,12 @@ void Forecast_Node::initialize(ros::NodeHandle &nh) {
   if (!nh.getParam("allow_following_range", allow_following_range_))
     ROS_WARN("No allow_following_range specified");
 
+  XmlRpc::XmlRpcValue xml_rpc_value;
+  if (!nh.getParam("interpolation_fly_time", xml_rpc_value))
+    ROS_ERROR("Fly time no defined (namespace: %s)", nh.getNamespace().c_str());
+  else
+    interpolation_fly_time_.init(xml_rpc_value);
+
   tracker_ = std::make_unique<Tracker>(kf_matrices_);
 
   spin_observer_ = std::make_unique<SpinObserver>();
@@ -96,11 +102,14 @@ void Forecast_Node::initialize(ros::NodeHandle &nh) {
 
   tf_buffer_ = new tf2_ros::Buffer(ros::Duration(10));
   tf_listener_ = new tf2_ros::TransformListener(*tf_buffer_);
-  //  targets_sub_ =
-  //      nh.subscribe("/detection", 1, &Forecast_Node::speedCallback, this);
   targets_sub_ =
-      nh.subscribe("/detection", 1, &Forecast_Node::outpostCallback, this);
+      nh.subscribe("/detection", 1, &Forecast_Node::speedCallback, this);
+  //    targets_sub_ =
+  //      nh.subscribe("/detection", 1, &Forecast_Node::outpostCallback, this);
   track_pub_ = nh.advertise<rm_msgs::TrackData>("/track", 10);
+  fly_time_sub_ =
+      nh.subscribe("/controllers/gimbal_controller/bullet_solver/fly_time", 10,
+                   &Forecast_Node::flyTimeCB, this);
 }
 
 void Forecast_Node::forecastconfigCB(rm_forecast::ForecastConfig &config,
@@ -312,15 +321,20 @@ void Forecast_Node::outpostCallback(
     double duration = (ros::Time::now() - last_min_time_).toSec();
     //    ROS_INFO("duration:%f", duration);
 
-    double fly_time = -0.05 * msg->detections[0].pose.position.z + time_offset_;
-        ROS_INFO("fly_time:%f", fly_time);
+    //    double fly_time = -0.05 * msg->detections[0].pose.position.z +
+    //    time_offset_;
+    //    double fly_time =
+    //        interpolation_fly_time_.output(msg->detections[0].pose.position.z);
 
+    double fly_time = bullet_solver_fly_time_;
     if (duration > fly_time && duration < fly_time + 0.01)
       circle_suggest_fire_ = true;
 
     if (circle_suggest_fire_) {
       track_data.id = 7;
-      ROS_INFO("fly:%f", fly_time);
+      ROS_INFO("bullet_solver_fly_time:%f", fly_time);
+      ROS_INFO("distance:%f", msg->detections[0].pose.position.z);
+
       circle_suggest_fire_ = false;
     } else
       track_data.id = 6;
@@ -371,8 +385,12 @@ void Forecast_Node::outpostCallback(
 
 void Forecast_Node::speedCallback(
     const rm_msgs::TargetDetectionArray::Ptr &msg) {
+  rm_msgs::TrackData track_data;
+  track_data.header.stamp = msg->header.stamp;
+
   if (msg->detections.empty()) {
-    ROS_INFO("no target!");
+    track_data.id = 0;
+    track_pub_.publish(track_data);
     return;
   }
 
@@ -404,8 +422,6 @@ void Forecast_Node::speedCallback(
     detection_temp.pose = pose_out.pose;
     target_array_.detections.emplace_back(detection_temp);
   }
-
-  rm_msgs::TrackData track_data;
 
   /***如果是丢失状态则初始化tracker***/
   if (tracker_->tracker_state == Tracker::LOST) {
@@ -521,4 +537,7 @@ Forecast_Node::computeCircleCenter(const rm_msgs::TargetDetection point_1,
   return center;
 }
 
+void Forecast_Node::flyTimeCB(const std_msgs::Float64ConstPtr &msg) {
+  bullet_solver_fly_time_ = msg->data;
+}
 } // namespace rm_forecast
