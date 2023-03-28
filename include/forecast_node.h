@@ -84,7 +84,7 @@ private:
 
   //Spin observer
   std::unique_ptr<SpinObserver> spin_observer_;
-  bool allow_spin_observer_ = true;
+  bool allow_spin_observer_ = false;
 
   void forecastconfigCB(rm_forecast::ForecastConfig &config, uint32_t level);
 
