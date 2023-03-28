@@ -113,7 +113,7 @@ void Forecast_Node::initialize(ros::NodeHandle &nh) {
     initMatrix(mat_intrinsic,intrinsic);
     eigen2cv(mat_intrinsic,m_intrinsic_);
 
-    draw_sub_ = nh.subscribe("/galaxy_camera/image_raw", 1, &Forecast_Node::drawCallback, this);
+    draw_sub_ = nh.subscribe("/hk_camera/camera/image_raw", 1, &Forecast_Node::drawCallback, this);
     draw_pub_ = it_->advertise("reproject_image", 1);
 }
 
@@ -484,7 +484,7 @@ void Forecast_Node::speedCallback(
     detection_temp.pose = pose_out.pose;
     Eigen::Vector3d hit_point_cam = {detection_temp.pose.position.x, detection_temp.pose.position.y, detection_temp.pose.position.z};
     target2d_ = reproject(hit_point_cam);
-//    std::cout << "target2d = \n" << target2d_ << std::endl;
+    std::cout << "target2d = \n" << target2d_ << std::endl;
 
 }
 
