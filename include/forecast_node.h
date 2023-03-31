@@ -35,8 +35,8 @@
 #include <vector>
 
 using namespace std;
-namespace rm_forecast {
-
+namespace rm_forecast
+{
 static double max_match_distance_{};
 static int tracking_threshold_{};
 static int lost_threshold_{};
@@ -44,17 +44,16 @@ static double max_jump_angle_{};
 static double max_jump_period_{};
 static double allow_following_range_{};
 
-class Forecast_Node : public nodelet::Nodelet {
+class Forecast_Node : public nodelet::Nodelet
+{
 public:
   Forecast_Node() = default;
-
-  ~Forecast_Node() override {
+  ~Forecast_Node() override
+  {
     if (this->my_thread_.joinable())
       my_thread_.join();
   }
-
-  void initialize(ros::NodeHandle &nh);
-
+  void initialize(ros::NodeHandle& nh);
   void onInit() override;
 
 private:
@@ -65,17 +64,16 @@ private:
   ros::Publisher track_pub_, suggest_fire_pub_;
   ros::NodeHandle nh_;
   std::shared_ptr<image_transport::ImageTransport> it_;
-  dynamic_reconfigure::Server<rm_forecast::ForecastConfig> *forecast_cfg_srv_{};
-  dynamic_reconfigure::Server<rm_forecast::ForecastConfig>::CallbackType
-      forecast_cfg_cb_;
+  dynamic_reconfigure::Server<rm_forecast::ForecastConfig>* forecast_cfg_srv_{};
+  dynamic_reconfigure::Server<rm_forecast::ForecastConfig>::CallbackType forecast_cfg_cb_;
 
   // transform
-  //  std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
-  tf2_ros::TransformListener *tf_listener_;
-  tf2_ros::Buffer *tf_buffer_;
+  tf2_ros::TransformListener* tf_listener_;
+  tf2_ros::Buffer* tf_buffer_;
 
   // Last time received msg
   ros::Time last_time_;
+  ros::Time last_min_time_;
 
   // Initial KF matrices
   KalmanFilterMatrices kf_matrices_;
@@ -89,56 +87,33 @@ private:
   std::unique_ptr<SpinObserver> spin_observer_;
   bool allow_spin_observer_ = false;
 
-  void forecastconfigCB(rm_forecast::ForecastConfig &config, uint32_t level);
+  void forecastconfigCB(rm_forecast::ForecastConfig& config, uint32_t level);
+  void speedCallback(const rm_msgs::TargetDetectionArray::Ptr& msg);
+  void outpostCallback(const rm_msgs::TargetDetectionArray::Ptr& msg);
+  void flyTimeCB(const std_msgs::Float64ConstPtr& msg);
+  bool changeStatusCB(rm_msgs::StatusChange::Request& change, rm_msgs::StatusChange::Response& res);
+  geometry_msgs::Pose computeCircleCenter(const rm_msgs::TargetDetection point_1,
+                                          const rm_msgs::TargetDetection point_2,
+                                          const rm_msgs::TargetDetection point_3,
+                                          const rm_msgs::TargetDetection point_4);
 
-  void speedCallback(const rm_msgs::TargetDetectionArray::Ptr &msg);
-
-  void outpostCallback(const rm_msgs::TargetDetectionArray::Ptr &msg);
-
-  void flyTimeCB(const std_msgs::Float64ConstPtr &msg);
-
-  geometry_msgs::Pose
-  computeCircleCenter(const rm_msgs::TargetDetection point_1,
-                      const rm_msgs::TargetDetection point_2,
-                      const rm_msgs::TargetDetection point_3,
-                      const rm_msgs::TargetDetection point_4);
-
-  bool changeStatusCB(rm_msgs::StatusChange::Request &change,
-                      rm_msgs::StatusChange::Response &res);
-  ros::ServiceServer status_change_srv_;
-
-  int armor_type_ = 1;
   bool forecast_readied_ = true;
-  bool reset_ = false;
-  bool init_flag_ = false;
-  bool fitting_succeeded_ = false;
-  int target_quantity_ = 0;
-  int min_target_quantity_ = 5;
-  double line_speed_ = 0.8;
-  double z_c_ = 0.5;
-  double outpost_radius_ = 0.35;
-  double rotate_speed_ = 0.5;
-  bool circle_suggest_fire_ = false;
+  int armor_type_ = 1, min_target_quantity_ = 5, target_quantity_ = 0;
   double time_offset_ = 0.53;
   double time_thred_ = 0.01;
   double y_thred_ = 0.05;
-  double x_thred_ = 0.05;
-  ros::Time last_min_time_;
-  double max_x_ = 0, min_x_ = 0, min_distance_ = 0;
+  double min_distance_x_, min_distance_y_, min_distance_z_;
+  double fly_time_{}, bullet_solver_fly_time_{};
+
   rm_msgs::TargetDetectionArray max_x_target_;
   rm_msgs::TargetDetectionArray min_x_target_;
-  rm_msgs::TargetDetection target_[4]{};
   rm_msgs::TargetDetectionArray min_distance_target_;
-  ros::Time min_x_time_, last_get_target_time_;
-  double min_distance_x_, min_distance_y_, min_distance_z_,
-      min_camera_distance_;
-  double fly_time_;
-  double theta_b_;
-  int count_{};
+
+  rm_common::LinearInterp interpolation_fly_time_;
+
+  ros::ServiceServer status_change_srv_;
+
   std::thread my_thread_;
   image_transport::Publisher image_pub_;
-  rm_common::LinearInterp interpolation_fly_time_;
-  double bullet_solver_fly_time_{};
 };
-
-} // namespace rm_forecast
+}  // namespace rm_forecast
