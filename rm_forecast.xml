@@ -1,0 +1,8 @@
+<library path="lib/librm_forecast">
+    <class
+            name="rm_forecast/Forecast_Node"
+            type="rm_forecast::Forecast_Node"
+            base_class_type="nodelet::Nodelet">
+    <description>This is a rm_forecast plugin.</description>
+    </class>
+</library>

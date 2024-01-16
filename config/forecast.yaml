@@ -1,0 +1,19 @@
+max_match_distance: 2.9
+tracking_threshold: 200
+lost_threshold: 5
+
+pos_q: 1000
+vel_q: 1400
+
+is_clockwise: False
+fan_length: 0.75
+target_length: 0.4
+target_width: 0.44
+angular_velocity: 0.3511
+delay_time: 0.32
+speed_threshold: 1.2
+high_acceleration_coefficient: 2
+low_acceleration_coefficient: 2
+high_acceleration_offset: 0
+low_acceleration_offset: 0
+skip_frame_threshold: 1
