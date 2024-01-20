@@ -95,6 +95,10 @@ void Forecast_Node::initialize(ros::NodeHandle &nh) {
     ROS_WARN("No low_acceleration_offset specified");
   if (!nh.getParam("skip_frame_threshold", skip_frame_threshold_))
     ROS_WARN("No skip_frame_threshold specified");
+  if (!nh.getParam("is_static", is_static_))
+      ROS_WARN("No is_static specified");
+  if (!nh.getParam("is_small_buff", is_small_buff_))
+      ROS_WARN("No is_static specified");
 
   tracker_ = std::make_unique<Tracker>(kf_matrices_);
 
@@ -156,6 +160,8 @@ void Forecast_Node::forecastconfigCB(rm_forecast::ForecastConfig &config,
     config.high_acceleration_offset = high_acceleration_offset_;
     config.low_acceleration_offset = low_acceleration_offset_;
     config.skip_frame_threshold = skip_frame_threshold_;
+    config.is_static = is_static_;
+    config.is_small_buff = is_small_buff_;
     dynamic_reconfig_initialized_ = true;
   }
 
@@ -184,6 +190,8 @@ void Forecast_Node::forecastconfigCB(rm_forecast::ForecastConfig &config,
   high_acceleration_offset_ = config.high_acceleration_offset;
   low_acceleration_offset_ = config.low_acceleration_offset;
   skip_frame_threshold_ = config.skip_frame_threshold;
+  is_static_ = config.is_static;
+  is_small_buff_ = config.is_small_buff;
 }
 
 bool Forecast_Node::updateFan(Target &object, const InfoTarget &prev_target) {
@@ -388,17 +396,21 @@ void Forecast_Node::pointsCallback(
 //  ROS_INFO("time:%f", (msg->header.stamp - last_time_).toSec());
   //  ROS_INFO("kalman_speed + a:%f", tracker_->target_state(3) + a);
 
-  if (is_small_buff_)
-    params[3] = angular_velocity_;
+  if (is_small_buff_) {
+//      params[3] = angular_velocity_;
+      params[3] = CV_PI / 3 * delay_time_;
+  }
   else {
     if (abs(tracker_->target_state(3)) > speed_threshold_) {
-      params[3] = abs(tracker_->target_state(3)) +
-                  high_acceleration_coefficient_ *
-                      (tracker_->target_state(4) + high_acceleration_offset_);
+//      params[3] = abs(tracker_->target_state(3)) +
+//                  high_acceleration_coefficient_ *
+//                      (tracker_->target_state(4) + high_acceleration_offset_);
+        params[3] = high_acceleration_coefficient_ * ((abs(last_speed_) * 2 + (last_a_ + high_acceleration_offset_) * delay_time_) * delay_time_ / 2);
     } else {
-      params[3] = abs(tracker_->target_state(3)) +
-                  low_acceleration_coefficient_ *
-                      (tracker_->target_state(4) + low_acceleration_offset_);
+//      params[3] = abs(tracker_->target_state(3)) +
+//                  low_acceleration_coefficient_ *
+//                      (tracker_->target_state(4) + low_acceleration_offset_);
+        params[3] = low_acceleration_coefficient_ * ((abs(last_speed_) * 2 + (last_a_ + low_acceleration_offset_) * delay_time_) * delay_time_ / 2);
     }
 
     finalTarget final_target;
@@ -432,6 +444,7 @@ void Forecast_Node::pointsCallback(
     params[3] = 0.05;
 
   last_speed_ = tracker_->target_state(3);
+  last_a_ = tracker_->target_state(4);
 
   double t0 = 0;
   double t1 = delay_time_;
@@ -466,23 +479,23 @@ void Forecast_Node::pointsCallback(
   vec_in.y = -y_angle_ * params[3];
   vec_in.z = 0;
 
-//  try {
-//    geometry_msgs::TransformStamped transform = tf_buffer_->lookupTransform(
-//        "odom", pose_in.header.frame_id, msg->header.stamp, ros::Duration(1));
-//
-//    tf2::doTransform(vec_in, vec_out, transform);
-//  } catch (tf2::TransformException &ex) {
-//    ROS_WARN("%s", ex.what());
-//  }
-//
-//  try {
-//    geometry_msgs::TransformStamped transform = tf_buffer_->lookupTransform(
-//        "odom", pose_in.header.frame_id, msg->header.stamp, ros::Duration(1));
-//
-//    tf2::doTransform(pose_in.pose, pose_out.pose, transform);
-//  } catch (tf2::TransformException &ex) {
-//    ROS_WARN("%s", ex.what());
-//  }
+  try {
+    geometry_msgs::TransformStamped transform = tf_buffer_->lookupTransform(
+        "odom", pose_in.header.frame_id, msg->header.stamp, ros::Duration(1));
+
+    tf2::doTransform(vec_in, vec_out, transform);
+  } catch (tf2::TransformException &ex) {
+    ROS_WARN("%s", ex.what());
+  }
+
+  try {
+    geometry_msgs::TransformStamped transform = tf_buffer_->lookupTransform(
+        "odom", pose_in.header.frame_id, msg->header.stamp, ros::Duration(1));
+
+    tf2::doTransform(pose_in.pose, pose_out.pose, transform);
+  } catch (tf2::TransformException &ex) {
+    ROS_WARN("%s", ex.what());
+  }
 
   detection_temp.pose = pose_out.pose;
 
@@ -568,17 +581,20 @@ std::vector<double> Forecast_Node::calcAimingAngleOffset(Target &object,
   //  cout << "t0: " << t0 << endl;
   // f(x) = a * sin(ω * t + θ) + b
   // 对目标函数进行积分
-  if (is_small_buff_) // 适用于小符模式
-  {
-    theta0 = 0;
-    theta1 = b;
-  } else {
-    theta0 = b * t0;
-    theta1 = b * t1;
-  }
+//  if (is_small_buff_) // 适用于小符模式
+//  {
+//    theta0 = 0;
+//    theta1 = b;
+//  } else {
+//    theta0 = b * t0;
+//    theta1 = b * t1;
+//  }
+  theta0 = 0;
+  theta1 = b;
   cout << (theta1 - theta0) * 180 / CV_PI << endl;
   theta_offset_ = theta1 - theta0;
   double theta_offset = theta1 - theta0;
+  if (is_static_) theta_offset = 0;
   //  ROS_INFO("theta1%f, theta0%f, b%f", theta1, theta0, b);
   int clockwise_sign = is_clockwise_ == 1 ? 1 : -1;
   Eigen::Vector3d hit_point_world = {clockwise_sign * sin(theta_offset) *

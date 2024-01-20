@@ -182,6 +182,8 @@ private:
   double high_acceleration_offset_;
   double low_acceleration_offset_;
 
+  bool is_static_;
+
   int plus_num_ = 0;
   int minus_num_ = 0;
   float last_speed_ = 0;
