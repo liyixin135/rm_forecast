@@ -161,7 +161,6 @@ void Forecast_Node::forecastconfigCB(rm_forecast::ForecastConfig &config,
     config.low_acceleration_offset = low_acceleration_offset_;
     config.skip_frame_threshold = skip_frame_threshold_;
     config.is_static = is_static_;
-    config.is_small_buff = is_small_buff_;
     dynamic_reconfig_initialized_ = true;
   }
 
@@ -191,7 +190,6 @@ void Forecast_Node::forecastconfigCB(rm_forecast::ForecastConfig &config,
   low_acceleration_offset_ = config.low_acceleration_offset;
   skip_frame_threshold_ = config.skip_frame_threshold;
   is_static_ = config.is_static;
-  is_small_buff_ = config.is_small_buff;
 }
 
 bool Forecast_Node::updateFan(Target &object, const InfoTarget &prev_target) {
@@ -397,11 +395,10 @@ void Forecast_Node::pointsCallback(
   //  ROS_INFO("kalman_speed + a:%f", tracker_->target_state(3) + a);
 
   if (is_small_buff_) {
-//      params[3] = angular_velocity_;
       params[3] = CV_PI / 3 * delay_time_;
   }
   else {
-    if (abs(tracker_->target_state(3)) > speed_threshold_) {
+    if (abs(last_speed_) < speed_threshold_) {
 //      params[3] = abs(tracker_->target_state(3)) +
 //                  high_acceleration_coefficient_ *
 //                      (tracker_->target_state(4) + high_acceleration_offset_);
