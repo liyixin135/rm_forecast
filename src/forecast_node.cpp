@@ -333,6 +333,31 @@ void Forecast_Node::pointsCallback(
   //  r_2d.x = data[8];
   //  r_2d.y = data[9];
 
+  RotatedRect rect = minAreaRect(pic_points);
+  Mat points;
+  boxPoints(rect, points);
+  std::vector<std::pair<Point2f, int>> sorted_pts;
+  for (int i = 0; i < 4; ++i)
+  {
+      std::pair<Point2f, int> pt;
+      pt.first = Point2f(points.at<float>(i,0), points.at<float>(i,1));
+      pt.second = i;
+      sorted_pts.emplace_back(pt);
+  }
+  std::array<Point2f, 8> pts = {sorted_pts[0].first, sorted_pts[1].first, sorted_pts[2].first, sorted_pts[3].first,
+                                sorted_pts[0].first, sorted_pts[1].first, sorted_pts[2].first, sorted_pts[3].first};
+  std::sort(sorted_pts.begin(), sorted_pts.end(),
+            [&](const auto &v1, const auto &v2){ return norm(v1.first - pic_points[0]) < norm(v2.first - pic_points[0]);});
+  for (int i = 0; i < 4; ++i)
+  {
+      if (i == sorted_pts[0].second)
+      {
+          pic_points.clear();
+          for (int j = 0; j < 4; ++j) pic_points.emplace_back(pts[i + j]);
+          break;
+      }
+  }
+
   Target hit_target = pnp(pic_points);
   Point2f target2d = reproject(hit_target.tvec);
 
@@ -596,7 +621,7 @@ std::vector<double> Forecast_Node::calcAimingAngleOffset(Target &object,
   int clockwise_sign = is_clockwise_ == 1 ? 1 : -1;
   Eigen::Vector3d hit_point_world = {clockwise_sign * sin(theta_offset) *
                                          fan_length_,
-                                     -(cos(theta_offset) - 1) * fan_length_, 0};
+                                     (cos(theta_offset) - 1) * fan_length_, 0};
   Eigen::Vector3d hit_point_cam = (object.rmat * hit_point_world) + object.tvec;
   //  std::cout << "hit_point_world.transpose() = \n"
   //            << hit_point_world.transpose() << std::endl;
