@@ -79,6 +79,8 @@ public:
 
   void onInit() override;
 
+  static Eigen::MatrixXd jacobianFunc(const Eigen::VectorXd &x, const double &dt, const double &last_second);
+
 private:
   rm_msgs::TargetDetectionArray target_array_;
   ros::Subscriber points_targets_sub_;
@@ -100,10 +102,12 @@ private:
 
   // Initial KF matrices
   KalmanFilterMatrices kf_matrices_;
+  ExtendedKalmanFilterMatrices ekf_matrices_;
   double dt_;
 
   // Armor tracker
   std::unique_ptr<Tracker> tracker_;
+  std::unique_ptr<EKFTracker> ekf_tracker_;
   bool tracking_{};
 
   bool dynamic_reconfig_initialized_ = false;
@@ -182,6 +186,13 @@ private:
   double high_acceleration_offset_;
   double low_acceleration_offset_;
 
+  double init_second_;
+  double last_second_;
+  double amplitude_;
+  double angular_frequency_;
+  double phase_;
+  double offset_;
+
   bool is_static_;
 
   int plus_num_ = 0;
@@ -199,6 +210,11 @@ private:
   bool is_filled_up_ = false;
   int deque_len_ = 200;
   double max_delta_t_ = 0.3;
+
+  bool kf_type_;
+
+  double integralCalculation(double &amplitude, double &angular_frequency, double &phase, double &offset,
+                             double &last_second, double &dt);
 };
 
 } // namespace rm_forecast

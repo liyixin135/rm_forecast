@@ -63,6 +63,43 @@ private:
   Eigen::Vector3d tracking_velocity_;
 };
 
+class EKFTracker {
+public:
+    EKFTracker(const ExtendedKalmanFilterMatrices &ekf_matrices);
+
+    //        using Armors = auto_aim_interfaces::msg::Armors; /***？？***/
+    //        using Armor = auto_aim_interfaces::msg::Armor;
+
+    void init(const float &amplitude, const float &angular_frequency, const float &phase,
+              const float &offset, const float &angle, const float &speed);
+
+    void update(const float &amplitude, const float &angular_frequency, const float &phase,
+                const float &offset, const float &angle, const float &speed,
+                const double &dt, const double &last_second, const double &max_match_distance,
+                const int &tracking_threshold, const int &lost_threshold);
+
+    enum State {
+        LOST,
+        DETECTING,
+        TRACKING,
+        TEMP_LOST,
+        } tracker_state;
+
+    char tracking_id;
+    Eigen::VectorXd target_state;
+
+    double min_distance_ = 800;
+
+    int detect_count_;
+    int lost_count_;
+
+private:
+    ExtendedKalmanFilterMatrices ekf_matrices_;
+    std::unique_ptr<ExtendedKalmanFilter> ekf_;
+
+    Eigen::Vector3d tracking_velocity_;
+};
+
 } // namespace rm_forecast
 
 #endif // RM_FORECAST_TRACKER_H

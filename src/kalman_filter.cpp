@@ -43,4 +43,42 @@ namespace rm_forecast
         return x_post;
     }
 
+    ExtendedKalmanFilter::ExtendedKalmanFilter(const rm_forecast::ExtendedKalmanFilterMatrices &matrices)
+            : F(matrices.F),
+              J_H(matrices.J_H),
+              Q(matrices.Q),
+              R(matrices.R),
+              P_post(matrices.P),
+              n(matrices.F.rows()),
+              I(Eigen::MatrixXd::Identity(n, n)),
+              x_pre(n), /***初始化一个还没赋值的矩阵***/
+              x_post(n)
+    {
+    }
+
+    void ExtendedKalmanFilter::init(const Eigen::VectorXd &x0) { x_post = x0; } /***赋值上一个时刻的估计值***/
+
+    Eigen::MatrixXd ExtendedKalmanFilter::predict(const Eigen::MatrixXd &F)
+    {
+        this->F = F;
+
+        x_pre = F * x_post;
+        P_pre = F * P_post * F.transpose() + Q;
+
+        // handle the case when there will be no measurement before the next predict 处理在下一次预测之前没有测量的情况
+        x_post = x_pre;
+        P_post = P_pre;
+
+        return x_pre; /***返回本时刻的预测值***/
+    }
+
+    Eigen::MatrixXd ExtendedKalmanFilter::update(const Eigen::VectorXd & z)
+    {
+        K = P_pre * J_H.transpose() * (J_H * P_pre * J_H.transpose() + R).inverse();
+        x_post = x_pre + K * (z - J_H * x_pre);
+        P_post = (I - K * J_H) * P_pre;
+
+        return x_post;
+    }
+
 }  // namespace rm_forecast

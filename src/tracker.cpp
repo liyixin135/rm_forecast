@@ -49,4 +49,43 @@ namespace rm_forecast
             /***如果离预测目标最近的装甲板的距离大于阈值，则寻找另一个id相同的装甲板重新作为追踪目标，并把上一个追踪目标的速度给它***/
     }
 
+    EKFTracker::EKFTracker(const ExtendedKalmanFilterMatrices & ekf_matrices)
+            : tracker_state(LOST),
+              tracking_id(0),
+              ekf_matrices_(ekf_matrices),
+              tracking_velocity_(Eigen::Vector3d::Zero())
+    {
+    }
+
+    void EKFTracker::init(const float &amplitude, const float &angular_frequency, const float &phase, const float &offset,
+                          const float &angle, const float &speed){
+        // EKF init
+        ekf_ = std::make_unique<ExtendedKalmanFilter>(ekf_matrices_);
+        Eigen::VectorXd init_state(8);
+        init_state << amplitude, angular_frequency, phase, offset, angle, speed, 0, 0;
+        ekf_->init(init_state);
+
+        tracker_state =
+                DETECTING; /***设置装甲板状态为目标识别中，需要更多帧识别到才开始跟踪***/
+    }
+
+    void EKFTracker::update(const float &amplitude, const float &angular_frequency, const float &phase, const float &offset,
+                            const float &angle, const float &speed, const double &dt, const double &last_second,
+                            const double &max_match_distance, const int &tracking_threshold, const int &lost_threshold) {
+        // EKF predict
+        ekf_matrices_.F(4, 6) = ekf_matrices_.F(5, 7) = dt; /***更新f矩阵***/
+        Eigen::VectorXd kf_prediction =
+                ekf_->predict(ekf_matrices_.F); /***得出本时刻预测值***/
+        bool matched = false;
+        // Use KF prediction as default target state if no matched armor is found
+        target_state = kf_prediction; /***本时刻预测值***/
+
+        Eigen::VectorXd position_vec(6);
+        position_vec << amplitude, angular_frequency, phase, offset, angle, speed;
+        ekf_matrices_.J_H = Forecast_Node::jacobianFunc(position_vec, dt, last_second);
+        /***只有这个时候才做卡尔曼滤波的更新部分***/
+        target_state = ekf_->update(position_vec);
+        /***如果离预测目标最近的装甲板的距离大于阈值，则寻找另一个id相同的装甲板重新作为追踪目标，并把上一个追踪目标的速度给它***/
+    }
+
 }  // namespace rm_auto_aim
