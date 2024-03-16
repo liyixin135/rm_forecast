@@ -77,7 +77,7 @@ namespace rm_forecast
         Eigen::MatrixXd predict(const Eigen::MatrixXd & F);
 
         // Update the estimated state based on measurement
-        Eigen::MatrixXd update(const Eigen::VectorXd & z);
+        Eigen::MatrixXd update(const Eigen::VectorXd & z, const Eigen::MatrixXd & J_H);
 
     private:
         // Invariant matrices

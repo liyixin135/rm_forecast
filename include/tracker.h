@@ -70,13 +70,15 @@ public:
     //        using Armors = auto_aim_interfaces::msg::Armors; /***？？***/
     //        using Armor = auto_aim_interfaces::msg::Armor;
 
-    void init(const float &amplitude, const float &angular_frequency, const float &phase,
-              const float &offset, const float &angle, const float &speed);
+    void init(const float &a, const float &omega, const float &theta, const float &b);
+    void init(const float &a, const float &faiz, const float &theta, const float &b, const float &omega);
 
-    void update(const float &amplitude, const float &angular_frequency, const float &phase,
-                const float &offset, const float &angle, const float &speed,
-                const double &dt, const double &last_second, const double &max_match_distance,
-                const int &tracking_threshold, const int &lost_threshold);
+    void update(const float &angle, const double &a, const double &omega, const double &theta, const double &b,
+                const double &dt, const double &last_second,
+                const double &max_match_distance, const int &tracking_threshold, const int &lost_threshold);
+    void update(const float &speed, const double &a, const double &faiz,
+                const double &theta, const double &b, const double &omega,
+                const double &dt);
 
     enum State {
         LOST,

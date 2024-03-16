@@ -36,6 +36,7 @@
 #include <tf2_ros/transform_listener.h>
 #include <thread>
 #include <vector>
+#include <random>
 
 using namespace std;
 
@@ -80,6 +81,7 @@ public:
   void onInit() override;
 
   static Eigen::MatrixXd jacobianFunc(const Eigen::VectorXd &x, const double &dt, const double &last_second);
+  static Eigen::MatrixXd jacobianFunc(const Eigen::VectorXd &x);
 
 private:
   rm_msgs::TargetDetectionArray target_array_;
@@ -190,8 +192,9 @@ private:
   double last_second_;
   double amplitude_;
   double angular_frequency_;
-  double phase_;
+  double theta_;
   double offset_;
+//  double faiz_;
 
   bool is_static_;
 
@@ -213,7 +216,7 @@ private:
 
   bool kf_type_;
 
-  double integralCalculation(double &amplitude, double &angular_frequency, double &phase, double &offset,
+  double integralCalculation(double &amplitude, double &angular_frequency, double &theta, double &offset,
                              double &last_second, double &dt);
 };
 

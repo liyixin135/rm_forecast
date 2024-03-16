@@ -24,4 +24,4 @@ skip_frame_threshold: 1
 is_static: False
 is_small_buff: True
 
-kf_type: True
+kf_type: False

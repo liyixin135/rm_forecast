@@ -72,8 +72,10 @@ namespace rm_forecast
         return x_pre; /***返回本时刻的预测值***/
     }
 
-    Eigen::MatrixXd ExtendedKalmanFilter::update(const Eigen::VectorXd & z)
+    Eigen::MatrixXd ExtendedKalmanFilter::update(const Eigen::VectorXd & z, const Eigen::MatrixXd & J_H)
     {
+        this->J_H = J_H;
+
         K = P_pre * J_H.transpose() * (J_H * P_pre * J_H.transpose() + R).inverse();
         x_post = x_pre + K * (z - J_H * x_pre);
         P_post = (I - K * J_H) * P_pre;

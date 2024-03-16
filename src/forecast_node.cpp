@@ -37,31 +37,40 @@ void Forecast_Node::initialize(ros::NodeHandle &nh) {
   {
       // Kalman Filter initial matrix
       // clang-format off
-      Eigen::MatrixXd f(8, 8);
-      /*** 幅度 角频率 相位 偏移量 本时刻角位置 本时刻角速度 下一时刻角速度 下一时刻角加速度***/
-      f <<  1,  0,  0,  0,  0,  0,  0,  0,
-              0,  1,  0,  0,  0,  0,  0,  0,
-              0,  0,  1,  0,  0,  0,  0,  0,
-              0,  0,  0,  1,  0,  0,  0,  0,
-              0,  0,  0,  0,  1,  0, dt_, 0,
-              0,  0,  0,  0,  0,  1,  0, dt_,
-              0,  0,  0,  0,  0,  0,  1,  0,
-              0,  0,  0,  0,  0,  0,  0,  1;
+      Eigen::MatrixXd f(4, 4);
+      /***幅度 角频率 相位 偏置***/
+      f <<  1, 0, 0, 0,
+            0, 1, 0, 0,
+            0, 0, 1, 0,
+            0, 0, 0, 1;
       // clang-format on
 
-      Eigen::VectorXd x(8);
+      // clang-format off
+//      Eigen::MatrixXd f(5, 5);
+//      f <<  1, 0, 0, 0, 0,
+//            0, 1, 0, 0, dt_,
+//            0, 0, 1, 0, 0,
+//            0, 0, 0, 1, 0,
+//            0, 0, 0, 0, 1;
+      // clang-format on
+
+      Eigen::VectorXd x(4);
       auto j_h = jacobianFunc(x, dt_, last_second_);
 
       // Q - process noise covariance matrix
-      Eigen::DiagonalMatrix<double, 8> q;
-      q.diagonal() << 500, 500, 500, 500, 500, 500, 500, 500;
+//      Eigen::DiagonalMatrix<double, 4> q;
+//      q.diagonal() << 500, 500, 500, 500;
+      Eigen::DiagonalMatrix<double, 4> q;
+      q.diagonal() << 500, 500, 500, 500;
 
       // R - measurement noise covariance matrix
-      Eigen::DiagonalMatrix<double, 6> r;
-      r.diagonal() << 0.05, 0.05, 0.05, 0.05, 0.05, 0.05;
+      Eigen::DiagonalMatrix<double, 1> r;
+      r.diagonal() << 0.05;
 
       // P - error estimate covariance matrix
-      Eigen::DiagonalMatrix<double, 8> p;
+//      Eigen::DiagonalMatrix<double, 4> p;
+//      p.setIdentity();
+      Eigen::DiagonalMatrix<double, 4> p;
       p.setIdentity();
 
       ekf_matrices_ = ExtendedKalmanFilterMatrices{f, j_h, q, r, p}; /***初始化卡尔曼滤波初始参数***/
@@ -187,7 +196,8 @@ void Forecast_Node::forecastconfigCB(rm_forecast::ForecastConfig &config,
   /// track
   double pos_q = config.pos_q;
   double vel_q = config.vel_q;
-  if (kf_type_) ekf_matrices_.Q.diagonal() << pos_q, pos_q, pos_q, pos_q, pos_q, pos_q, vel_q, vel_q;
+//  if (kf_type_) ekf_matrices_.Q.diagonal() << pos_q, pos_q, pos_q, pos_q;
+  if (kf_type_) ekf_matrices_.Q.diagonal() << pos_q, pos_q, pos_q, pos_q;
   else kf_matrices_.Q.diagonal() << pos_q, pos_q, pos_q, vel_q, vel_q, vel_q;
   max_match_distance_ = config.max_match_distance;
   tracking_threshold_ = config.tracking_threshold;
@@ -232,9 +242,13 @@ void Forecast_Node::speedSolution(InfoTarget &prev_target) {
   if (angle > 0.2 || angle < 0) {
     skip_flag_ = true;
     angle = 0.05;
+    if (ekf_tracker_->tracker_state == EKFTracker::DETECTING) angle = frame_angle_;
   }
   if (isnan(angle))
-    angle = 0.05;
+  {
+      angle = 0.05;
+      if (ekf_tracker_->tracker_state == EKFTracker::DETECTING) angle = frame_angle_;
+  }
 
   //  filter_.input(angle, prev_target.stamp);
   //  angle = filter_.output();
@@ -260,8 +274,8 @@ float Forecast_Node::getAngle() {
   //  ROS_INFO("prev x:%f", prev_fan_.armor_center_points.x);
   //  ROS_INFO("prev y:%f", prev_fan_.armor_center_points.y);
   //  cout << "Cross product:\n" << vec1.cross(vec2) << endl;
-  cout << "plus_num_:\n" << plus_num_ << endl;
-  cout << "minus_num_:\n" << minus_num_ << endl;
+  //  cout << "plus_num_:\n" << plus_num_ << endl;
+  //  cout << "minus_num_:\n" << minus_num_ << endl;
 
   if (vec1.cross(vec2) > 0)
     plus_num_++;
@@ -393,11 +407,12 @@ void Forecast_Node::pointsCallback(
   {
       if (ekf_tracker_->tracker_state == EKFTracker::LOST) {
           amplitude_ = 0.9125;
-          angular_frequency_ = 1.942;
-          phase_ = 0;
-          offset_ = 1.1775;
-
-          ekf_tracker_->init(0.9125, 1.942, 0, 1.1775, 0.1, 0.1);
+          angular_frequency_= 1.942;
+          theta_ = 0;
+          offset_ = 2.090 - amplitude_;
+//          faiz_ = 0.1;
+          ekf_tracker_->init(amplitude_, angular_frequency_, theta_, offset_);
+//          ekf_tracker_->init(amplitude_, faiz_, theta_, offset_, angular_frequency_);
           //            target_msg.tracking = false;
           init_second_ = info_target.stamp.toSec();
           tracking_ = false;
@@ -415,11 +430,15 @@ void Forecast_Node::pointsCallback(
               dt_ = 0.018;
           }
 
+          last_speed_ = frame_angle_ / dt_;
+          filter_.input(last_speed_);
+          last_speed_ = filter_.output();
           last_second_ = info_target.stamp.toSec() - init_second_;
-
-          ekf_tracker_->update(amplitude_, angular_frequency_, phase_, offset_,
-                               info_target.angle, speed_, dt_, last_second_,
+          ekf_tracker_->update(last_speed_, amplitude_, angular_frequency_, theta_, offset_,
+                               dt_, last_second_,
                                max_match_distance_, tracking_threshold_, lost_threshold_);
+//          ekf_tracker_->update(last_speed_, amplitude_, faiz_, theta_, offset_,
+//                               angular_frequency_, dt_);
           tracking_ = true;
       }
   }
@@ -466,13 +485,20 @@ void Forecast_Node::pointsCallback(
   {
       amplitude_ = ekf_tracker_->target_state(0);
       angular_frequency_ = ekf_tracker_->target_state(1);
-      phase_ = ekf_tracker_->target_state(2);
+//      faiz_ = ekf_tracker_->target_state(1);
+      theta_ = ekf_tracker_->target_state(2);
       offset_ = ekf_tracker_->target_state(3);
-      speed_ = ekf_tracker_->target_state(6);
+//      offset_ = 2.090 - amplitude_;
+//      angular_frequency_ = ekf_tracker_->target_state(4);
 
-//      ROS_INFO("Objective function is : f(x) = %f * sin[%f * t + (%f)] + %f", amplitude_, angular_frequency_, phase_, offset_);
+      ROS_INFO("Objective function is : f(x) = %f * sin(%f * t + %f) + %f", amplitude_, angular_frequency_, theta_, offset_);
   }
-  else speed_ = tracker_->target_state(3);
+  else
+  {
+      speed_ = tracker_->target_state(3);
+      last_speed_ = tracker_->target_state(3);
+      last_a_ = tracker_->target_state(4);
+  }
 
   double params[4];
   //  double a = (tracker_->target_state(3) - last_speed_) / (msg->header.stamp
@@ -493,7 +519,7 @@ void Forecast_Node::pointsCallback(
   else {
       if (kf_type_)
       {
-          params[3] = integralCalculation(amplitude_, angular_frequency_, phase_, offset_, last_second_, delay_time_);
+          params[3] = integralCalculation(amplitude_, angular_frequency_, theta_, offset_, last_second_, delay_time_);
       }
       else
       {
@@ -540,17 +566,6 @@ void Forecast_Node::pointsCallback(
   if (params[3] < 0)
     params[3] = 0.05;
 
-  if (kf_type_)
-  {
-      last_speed_ = ekf_tracker_->target_state(6);
-      last_a_ = ekf_tracker_->target_state(7);
-  }
-  else
-  {
-      last_speed_ = tracker_->target_state(3);
-      last_a_ = tracker_->target_state(4);
-  }
-
   double t0 = 0;
   double t1 = delay_time_;
   int mode = 0;
@@ -560,7 +575,11 @@ void Forecast_Node::pointsCallback(
   if (kf_type_)
   {
       rm_msgs::TargetDetection debug_result;
-      debug_result.pose.position.x = ekf_tracker_->target_state(6);
+      debug_result.pose.position.x = ekf_tracker_->target_state(0);
+      debug_result.pose.position.y = ekf_tracker_->target_state(1);
+      debug_result.pose.position.z = last_speed_;
+      debug_result.pose.orientation.x = ekf_tracker_->target_state(2);
+      debug_result.pose.orientation.y = ekf_tracker_->target_state(3);
 
       debug_pub_.publish(debug_result);
   }
@@ -578,61 +597,61 @@ void Forecast_Node::pointsCallback(
       debug_pub_.publish(debug_result);
   }
 
-//  rm_msgs::TargetDetection detection_temp;
-//  detection_temp.pose.position.x = hit_point[0];
-//  detection_temp.pose.position.y = hit_point[1];
-//  detection_temp.pose.position.z = hit_point[2];
-//
-//  geometry_msgs::PoseStamped pose_in;
-//  geometry_msgs::PoseStamped pose_out;
-//  geometry_msgs::Vector3 vec_in;
-//  geometry_msgs::Vector3 vec_out;
-//  pose_in.header.frame_id = "camera2_optical_frame";
-//  pose_in.header.stamp = msg->header.stamp;
-//  pose_in.pose = detection_temp.pose;
-//  vec_in.x = x_angle_ * params[3];
-//  vec_in.y = -y_angle_ * params[3];
-//  vec_in.z = 0;
-//
-//  try {
-//    geometry_msgs::TransformStamped transform = tf_buffer_->lookupTransform(
-//        "odom", pose_in.header.frame_id, msg->header.stamp, ros::Duration(1));
-//
-//    tf2::doTransform(vec_in, vec_out, transform);
-//  } catch (tf2::TransformException &ex) {
-//    ROS_WARN("%s", ex.what());
-//  }
-//
-//  try {
-//    geometry_msgs::TransformStamped transform = tf_buffer_->lookupTransform(
-//        "odom", pose_in.header.frame_id, msg->header.stamp, ros::Duration(1));
-//
-//    tf2::doTransform(pose_in.pose, pose_out.pose, transform);
-//  } catch (tf2::TransformException &ex) {
-//    ROS_WARN("%s", ex.what());
-//  }
-//
-//  detection_temp.pose = pose_out.pose;
-//
-//  track_data.id = 3;
-//  track_data.position.x = detection_temp.pose.position.x;
-//  track_data.position.y = detection_temp.pose.position.y;
-//  track_data.position.z = detection_temp.pose.position.z;
-//  //  track_data.velocity.x = vec_out.x;
-//  //  track_data.velocity.y = vec_out.y;
-//  //  track_data.velocity.z = vec_out.z;
-//  track_data.velocity.x = 0;
-//  track_data.velocity.y = 0;
-//  track_data.velocity.z = 0;
-//  track_data.armors_num = 2;
-//  //  track_data.target_pos.x = detection_temp.pose.position.x;
-//  //  track_data.target_pos.y = detection_temp.pose.position.y;
-//  //  track_data.target_pos.z = detection_temp.pose.position.z;
-//  //  track_data.target_vel.x = 0;
-//  //  track_data.target_vel.y = 0;
-//  //  track_data.target_vel.z = 0;
-//  track_pub_.publish(track_data);
-//  last_time_ = msg->header.stamp;
+  rm_msgs::TargetDetection detection_temp;
+  detection_temp.pose.position.x = hit_point[0];
+  detection_temp.pose.position.y = hit_point[1];
+  detection_temp.pose.position.z = hit_point[2];
+
+  geometry_msgs::PoseStamped pose_in;
+  geometry_msgs::PoseStamped pose_out;
+  geometry_msgs::Vector3 vec_in;
+  geometry_msgs::Vector3 vec_out;
+  pose_in.header.frame_id = "camera2_optical_frame";
+  pose_in.header.stamp = msg->header.stamp;
+  pose_in.pose = detection_temp.pose;
+  vec_in.x = x_angle_ * params[3];
+  vec_in.y = -y_angle_ * params[3];
+  vec_in.z = 0;
+
+  try {
+    geometry_msgs::TransformStamped transform = tf_buffer_->lookupTransform(
+        "odom", pose_in.header.frame_id, msg->header.stamp, ros::Duration(1));
+
+    tf2::doTransform(vec_in, vec_out, transform);
+  } catch (tf2::TransformException &ex) {
+    ROS_WARN("%s", ex.what());
+  }
+
+  try {
+    geometry_msgs::TransformStamped transform = tf_buffer_->lookupTransform(
+        "odom", pose_in.header.frame_id, msg->header.stamp, ros::Duration(1));
+
+    tf2::doTransform(pose_in.pose, pose_out.pose, transform);
+  } catch (tf2::TransformException &ex) {
+    ROS_WARN("%s", ex.what());
+  }
+
+  detection_temp.pose = pose_out.pose;
+
+  track_data.id = 3;
+  track_data.position.x = detection_temp.pose.position.x;
+  track_data.position.y = detection_temp.pose.position.y;
+  track_data.position.z = detection_temp.pose.position.z;
+  //  track_data.velocity.x = vec_out.x;
+  //  track_data.velocity.y = vec_out.y;
+  //  track_data.velocity.z = vec_out.z;
+  track_data.velocity.x = 0;
+  track_data.velocity.y = 0;
+  track_data.velocity.z = 0;
+  track_data.armors_num = 2;
+  //  track_data.target_pos.x = detection_temp.pose.position.x;
+  //  track_data.target_pos.y = detection_temp.pose.position.y;
+  //  track_data.target_pos.z = detection_temp.pose.position.z;
+  //  track_data.target_vel.x = 0;
+  //  track_data.target_vel.y = 0;
+  //  track_data.target_vel.z = 0;
+  track_pub_.publish(track_data);
+  last_time_ = msg->header.stamp;
 }
 
 Target Forecast_Node::pnp(const std::vector<Point2f> &points_pic) {
@@ -706,7 +725,7 @@ std::vector<double> Forecast_Node::calcAimingAngleOffset(Target &object,
 //  }
   theta0 = 0;
   theta1 = b;
-  cout << (theta1 - theta0) * 180 / CV_PI << endl;
+//  cout << (theta1 - theta0) * 180 / CV_PI << endl;
   theta_offset_ = theta1 - theta0;
   double theta_offset = theta1 - theta0;
   if (is_static_) theta_offset = 0;
@@ -771,35 +790,38 @@ bool Forecast_Node::initMatrix(Eigen::MatrixXd& matrix, std::vector<T>& vector)
 
 Eigen::MatrixXd Forecast_Node::jacobianFunc(const Eigen::VectorXd &x, const double &dt, const double &last_second)
 {
-    Eigen::MatrixXd h(6, 8);
-    double amplitude = x(0), angular_frequency = x(1), phase = x(2),
-            offset = x(3), angle = x(4), speed = x(5);
-    double f1x1 = dt * sin(angular_frequency * last_second + phase),
-            f1x2 = dt * amplitude * last_second * cos(angular_frequency * last_second + phase),
-            f1x3 = dt * amplitude * cos(angular_frequency * last_second + phase),
-            f1x4 = dt,
-            f1x5 = 1,
-            f1x6 = 0,
-            f2x1 = dt * angular_frequency * cos(angular_frequency * last_second + phase),
-            f2x2 = dt * (amplitude * cos(angular_frequency * last_second + phase) - angular_frequency * last_second * amplitude * sin(angular_frequency * last_second + phase)),
-            f2x3 = -dt * angular_frequency * amplitude * sin(angular_frequency * last_second + phase),
-            f2x4 = 0,
-            f2x5 = 0,
-            f2x6 = 1;
+    Eigen::MatrixXd j_h(1, 4);
+    double a = x(0), omega = x(1), theta = x(2), b = x(3);
+    double f1x1 = sin(omega * last_second + theta),
+           f1x2 = a * last_second * cos(omega * last_second + theta),
+           f1x3 = a * cos(omega * last_second + theta),
+           f1x4 = 1;
     // clang-format off
-    h <<    1,     0,     0,     0,     0,     0,   0,   0,
-            0,     1,     0,     0,     0,     0,   0,   0,
-            0,     0,     1,     0,     0,     0,   0,   0,
-            0,     0,     0,     1,     0,     0,   0,   0,
-            f1x1,  f1x2,  f1x3,  f1x4,  f1x5,  f1x6,  0,   0,
-            f2x1,  f2x2,  f2x3,  f2x4,  f2x5,  f2x6,  0,   0;
+    j_h << f1x1, f1x2, f1x3, f1x4;
     // clang-format on
-    return h;
+    return j_h;
 }
 
-double Forecast_Node::integralCalculation(double &amplitude, double &angular_frequency, double &phase, double &offset, double &last_second, double &dt)
+Eigen::MatrixXd Forecast_Node::jacobianFunc(const Eigen::VectorXd &x)
 {
-    return -amplitude / angular_frequency * (cos(angular_frequency * (last_second + dt) + phase) - cos(angular_frequency * last_second + phase)) + offset * dt;
+    Eigen::MatrixXd j_h(1, 5);
+    double a = x(0), faiz = x(1), theta = x(2), b = x(3), omega = x(4);
+    double f0x0 = sin(faiz + theta);
+    double f0x1 = a * cos(faiz + theta);
+    double f0x2 = a * cos(faiz + theta);
+    double f0x3 = 1;
+    // clang-format off
+    j_h << f0x0, f0x1, f0x2, f0x3, 0;
+    // clang-format on
+
+    return j_h;
+}
+
+
+double Forecast_Node::integralCalculation(double &amplitude, double &angular_frequency, double &theta, double &offset,
+                                          double &last_second, double &dt)
+{
+    return -amplitude / angular_frequency * (cos(angular_frequency * (last_second + dt) + theta) - cos(angular_frequency * last_second + theta)) + offset * dt;
 }
 
 bool Forecast_Node::changeStatusCB(rm_msgs::StatusChange::Request& change, rm_msgs::StatusChange::Response& res)
