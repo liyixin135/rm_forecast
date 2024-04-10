@@ -7,11 +7,11 @@ vel_q: 1400
 
 is_clockwise: False
 #fan_length: 0.7
-#target_length: 0.37
-#target_width: 0.32
+target_length: 0.37
+target_width: 0.32
 fan_length: 0.75
-target_length: 0.4
-target_width: 0.44
+#target_length: 0.4
+#target_width: 0.44
 angular_velocity: 0.3511
 delay_time: 0.32
 speed_threshold: 1.3

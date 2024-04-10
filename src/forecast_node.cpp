@@ -47,6 +47,7 @@ void Forecast_Node::initialize(ros::NodeHandle &nh) {
 
       // clang-format off
 //      Eigen::MatrixXd f(5, 5);
+//      /***幅度 角频率与时间之积 相位 偏置 角频率***/
 //      f <<  1, 0, 0, 0, 0,
 //            0, 1, 0, 0, dt_,
 //            0, 0, 1, 0, 0,
@@ -189,14 +190,12 @@ void Forecast_Node::forecastconfigCB(rm_forecast::ForecastConfig &config,
     config.low_acceleration_offset = low_acceleration_offset_;
     config.skip_frame_threshold = skip_frame_threshold_;
     config.is_static = is_static_;
-    config.kf_type = kf_type_;
     dynamic_reconfig_initialized_ = true;
   }
 
   /// track
   double pos_q = config.pos_q;
   double vel_q = config.vel_q;
-//  if (kf_type_) ekf_matrices_.Q.diagonal() << pos_q, pos_q, pos_q, pos_q;
   if (kf_type_) ekf_matrices_.Q.diagonal() << pos_q, pos_q, pos_q, pos_q;
   else kf_matrices_.Q.diagonal() << pos_q, pos_q, pos_q, vel_q, vel_q, vel_q;
   max_match_distance_ = config.max_match_distance;
@@ -220,7 +219,6 @@ void Forecast_Node::forecastconfigCB(rm_forecast::ForecastConfig &config,
   low_acceleration_offset_ = config.low_acceleration_offset;
   skip_frame_threshold_ = config.skip_frame_threshold;
   is_static_ = config.is_static;
-  kf_type_ = config.kf_type;
 }
 
 bool Forecast_Node::updateFan(Target &object, const InfoTarget &prev_target) {
@@ -289,13 +287,18 @@ float Forecast_Node::getAngle() {
 
   auto costheta =
       static_cast<float>(vec1.dot(vec2) / (cv::norm(vec1) * cv::norm(vec2)));
-  auto costheta2 =
-      static_cast<float>(vec1.dot(vec3) / (cv::norm(vec1) * cv::norm(vec3)));
-  auto costheta3 =
-      static_cast<float>(vec1.dot(vec4) / (cv::norm(vec1) * cv::norm(vec4)));
+//  auto costheta2 =
+//      static_cast<float>(vec1.dot(vec3) / (cv::norm(vec1) * cv::norm(vec3)));
+//  auto costheta3 =
+//      static_cast<float>(vec1.dot(vec4) / (cv::norm(vec1) * cv::norm(vec4)));
+  auto costheta3 = static_cast<float>(vec3.dot(vec1) / (cv::norm(vec1) * cv::norm(vec3)));
+  auto theta3 = acos(costheta3);
   float angle = acos(costheta);
-  x_angle_ = costheta3;
-  y_angle_ = costheta2;
+  if (vec3.cross(vec1) < 0)
+      x_angle_ = theta3;
+  else
+      x_angle_ = -theta3;
+//  y_angle_ = costheta2;
 
   //  std_msgs::Float32 origin_msg;
   //  origin_msg.data = angle;
@@ -572,6 +575,22 @@ void Forecast_Node::pointsCallback(
   std::vector<double> hit_point =
       calcAimingAngleOffset(hit_target, params, t0, t1, mode);
 
+  rm_msgs::TargetDetection detection_temp;
+  detection_temp.pose.position.x = hit_point[0];
+  detection_temp.pose.position.y = hit_point[1];
+  detection_temp.pose.position.z = hit_point[2];
+
+  geometry_msgs::PoseStamped pose_in;
+  geometry_msgs::PoseStamped pose_out;
+  geometry_msgs::Vector3 vec_in;
+  geometry_msgs::Vector3 vec_out;
+  pose_in.header.frame_id = "camera2_optical_frame";
+  pose_in.header.stamp = msg->header.stamp;
+  pose_in.pose = detection_temp.pose;
+  vec_in.x = -tracker_->target_state(3) * sin(x_angle_);
+  vec_in.y = tracker_->target_state(3) * cos(x_angle_);
+  vec_in.z = 0;
+
   if (kf_type_)
   {
       rm_msgs::TargetDetection debug_result;
@@ -588,30 +607,14 @@ void Forecast_Node::pointsCallback(
       rm_msgs::TargetDetection debug_result;
       debug_result.pose.position.x = tracker_->target_state(3);
       debug_result.pose.position.y = tracker_->target_state(4);
-      debug_result.pose.position.z = 0;
-      debug_result.pose.orientation.y = params[3];
+      debug_result.pose.position.z = vec_in.x;
+      debug_result.pose.orientation.y = vec_in.y;
       debug_result.pose.orientation.z = frame_angle_;
       debug_result.pose.orientation.w =
               (tracker_->target_state(4) + low_acceleration_offset_);
 
       debug_pub_.publish(debug_result);
   }
-
-  rm_msgs::TargetDetection detection_temp;
-  detection_temp.pose.position.x = hit_point[0];
-  detection_temp.pose.position.y = hit_point[1];
-  detection_temp.pose.position.z = hit_point[2];
-
-  geometry_msgs::PoseStamped pose_in;
-  geometry_msgs::PoseStamped pose_out;
-  geometry_msgs::Vector3 vec_in;
-  geometry_msgs::Vector3 vec_out;
-  pose_in.header.frame_id = "camera2_optical_frame";
-  pose_in.header.stamp = msg->header.stamp;
-  pose_in.pose = detection_temp.pose;
-  vec_in.x = x_angle_ * params[3];
-  vec_in.y = -y_angle_ * params[3];
-  vec_in.z = 0;
 
   try {
     geometry_msgs::TransformStamped transform = tf_buffer_->lookupTransform(
@@ -637,9 +640,9 @@ void Forecast_Node::pointsCallback(
   track_data.position.x = detection_temp.pose.position.x;
   track_data.position.y = detection_temp.pose.position.y;
   track_data.position.z = detection_temp.pose.position.z;
-  //  track_data.velocity.x = vec_out.x;
-  //  track_data.velocity.y = vec_out.y;
-  //  track_data.velocity.z = vec_out.z;
+  track_data.velocity.x = vec_out.x;
+  track_data.velocity.y = vec_out.y;
+  track_data.velocity.z = vec_out.z;
   track_data.velocity.x = 0;
   track_data.velocity.y = 0;
   track_data.velocity.z = 0;
@@ -687,7 +690,7 @@ Target Forecast_Node::pnp(const std::vector<Point2f> &points_pic) {
            rvec, tvec, false, SOLVEPNP_ITERATIVE);
 
   std::array<double, 3> trans_vec = tvec.reshape(1, 1);
-  ROS_INFO("x:%f, y:%f, z:%f", trans_vec[0], trans_vec[1], trans_vec[2]);
+//  ROS_INFO("x:%f, y:%f, z:%f", trans_vec[0], trans_vec[1], trans_vec[2]);
 
   Target result;
   //        //Pc = R * Pw + T
