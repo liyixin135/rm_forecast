@@ -587,8 +587,16 @@ void Forecast_Node::pointsCallback(
   pose_in.header.frame_id = "camera2_optical_frame";
   pose_in.header.stamp = msg->header.stamp;
   pose_in.pose = detection_temp.pose;
-  vec_in.x = -tracker_->target_state(3) * sin(x_angle_);
-  vec_in.y = tracker_->target_state(3) * cos(x_angle_);
+  if (is_clockwise_)
+  {
+      vec_in.x = -tracker_->target_state(3) * sin(x_angle_);
+      vec_in.y = tracker_->target_state(3) * cos(x_angle_);
+  }
+  else
+  {
+      vec_in.x = tracker_->target_state(3) * sin(x_angle_);
+      vec_in.y = -tracker_->target_state(3) * cos(x_angle_);
+  }
   vec_in.z = 0;
 
   if (kf_type_)
