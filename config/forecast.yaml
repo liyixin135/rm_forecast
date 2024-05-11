@@ -4,12 +4,12 @@ lost_threshold: 5
 max_jump_angle: 0.02
 max_jump_period: 0.8
 allow_following_range: 0.5
-y_thred: 0.1
+y_thred: 0.15
 time_thred: 0.01
-time_offset: 0.9
-ramp_time_offset: 0.97
+time_offset: 0.4
+ramp_time_offset: 0.44
 ramp_threshold: 0.05
-min_target_quantity: 6
+min_target_quantity: 4
 const_distance: 7.3
 outpost_radius: 0.3
 rotate_speed: 0.1

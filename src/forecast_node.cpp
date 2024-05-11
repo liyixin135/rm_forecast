@@ -108,11 +108,11 @@ void Forecast_Node::initialize(ros::NodeHandle& nh)
   tf_broadcaster_.init(nh);
   ROS_INFO("armor type is : %d", armor_type_);
 
-//  enemy_targets_sub_ = nh.subscribe("/detection", 1, &Forecast_Node::speedCallback, this);
+  //  enemy_targets_sub_ = nh.subscribe("/detection", 1, &Forecast_Node::speedCallback, this);
   outpost_targets_sub_ = nh.subscribe("/outpost_detection", 1, &Forecast_Node::outpostCallback, this);
   track_pub_ = nh.advertise<rm_msgs::TrackData>("/track", 10);
   suggest_fire_pub_ = nh.advertise<std_msgs::Bool>("suggest_fire", 1);
-  duration_pub_ = nh.advertise<std_msgs::Float64>("duration",1);
+  duration_pub_ = nh.advertise<std_msgs::Float64>("duration", 1);
   fly_time_sub_ =
       nh.subscribe("/controllers/gimbal_controller/bullet_solver/fly_time", 10, &Forecast_Node::flyTimeCB, this);
 }
@@ -252,6 +252,8 @@ void Forecast_Node::outpostCallback(const rm_msgs::TargetDetectionArray::Ptr& ms
     detection_temp.confidence = detection.confidence;
     detection_temp.pose = pose_out.pose;
     target_array_.detections.emplace_back(detection_temp);
+
+    std::cout << "base_roll is " << base_roll << std::endl;
   }
   /*识别id不为前哨站*/
   if (!outpost_flag)
@@ -304,6 +306,7 @@ void Forecast_Node::outpostCallback(const rm_msgs::TargetDetectionArray::Ptr& ms
         min_distance_x_ = temp_min_distance_x_;
         min_distance_y_ = temp_min_distance_y_;
         min_distance_z_ = temp_min_distance_z_;
+        get_target_ = true;
       }
 
       target_quantity_++;
@@ -325,14 +328,21 @@ void Forecast_Node::outpostCallback(const rm_msgs::TargetDetectionArray::Ptr& ms
 
     track_data.id = target_array_.detections[0].id;
     track_data.header.frame_id = "odom";
-    track_data.position.x = min_distance_x_;
-    track_data.position.y = min_distance_y_;
-    track_data.position.z = min_distance_z_;
-
+    if (!get_target_)
+    {
+      track_data.position.x = target_array_.detections[0].pose.position.x;
+      track_data.position.y = target_array_.detections[0].pose.position.y;
+      track_data.position.z = target_array_.detections[0].pose.position.z;
+    }
+    else
+    {
+      track_data.position.x = min_distance_x_;
+      track_data.position.y = min_distance_y_;
+      track_data.position.z = min_distance_z_;
+    }
     track_data.velocity.x = 0;
     track_data.velocity.y = 0;
     track_data.velocity.z = 0;
-
     track_data.armors_num = 2;
   }
   else
