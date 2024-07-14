@@ -56,9 +56,10 @@ public:
   int detect_count_;
   int lost_count_;
 
+  KalmanFilter kf_;
+
 private:
   KalmanFilterMatrices kf_matrices_;
-  std::unique_ptr<KalmanFilter> kf_;
 
   Eigen::Vector3d tracking_velocity_;
 };

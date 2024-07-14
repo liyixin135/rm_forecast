@@ -26,6 +26,7 @@ find_package(catkin REQUIRED
 
 generate_dynamic_reconfigure_options(
         cfg/Forecast.cfg
+        cfg/Kf.cfg
 )
 
 catkin_package(

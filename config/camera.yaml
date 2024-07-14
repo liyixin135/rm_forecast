@@ -81,45 +81,39 @@
 
 #image_width: 1440
 #image_height: 1080
-#camera_name: narrow_stereo
+#camera_name: hk_camera
 #camera_matrix:
 #  rows: 3
 #  cols: 3
-#  data: [1801.20415,    0.     ,  736.44319,
-#         0.     , 1801.32412,  574.78376,
-#         0.     ,    0.     ,    1.     ]
+#  data: [1793.704831910134, 0, 742.5036535910525, 0, 1788.659048639523, 533.6589126016486, 0, 0, 1]
 #distortion_model: plumb_bob
 #distortion_coefficients:
 #  rows: 1
 #  cols: 5
-#  data: [-0.083160, 0.163325, 0.000178, 0.000828, 0.000000]
+#  data: [-0.2165213204724995, 0.177677745678517, 0.001142018714319799, -0.0001611141895322664, 0]
 #rectification_matrix:
 #  rows: 3
 #  cols: 3
-#  data: [1., 0., 0.,
-#         0., 1., 0.,
-#         0., 0., 1.]
+#  data: [1, 0, 0, 0, 1, 0, 0, 0, 1]
 #projection_matrix:
 #  rows: 3
 #  cols: 4
-#  data: [1783.25989,    0.     ,  736.82942,    0.     ,
-#         0.     , 1788.32666,  574.68033,    0.     ,
-#         0.     ,    0.     ,    1.     ,    0.     ]
+#  data: [1735.057373046875, 0, 743.1426938905497, 0, 0, 1753.196411132812, 533.5343125744657, 0, 0, 0, 1, 0]
 
 image_width: 1440
 image_height: 1080
-camera_name: narrow_stereo
+camera_name: hk_camera
 camera_matrix:
   rows: 3
   cols: 3
-  data: [1846.88626,    0.     ,  772.88129,
-         0.     , 1843.82451,  526.39082,
+  data: [1801.20415,    0.     ,  736.44319,
+         0.     , 1801.32412,  574.78376,
          0.     ,    0.     ,    1.     ]
 distortion_model: plumb_bob
 distortion_coefficients:
   rows: 1
   cols: 5
-  data: [-0.050859, 0.061549, -0.001521, 0.002341, 0.000000]
+  data: [-0.083160, 0.163325, 0.000178, 0.000828, 0.000000]
 rectification_matrix:
   rows: 3
   cols: 3
@@ -129,6 +123,6 @@ rectification_matrix:
 projection_matrix:
   rows: 3
   cols: 4
-  data: [1833.07739,    0.     ,  774.88249,    0.     ,
-         0.     , 1834.96765,  525.0648 ,    0.     ,
+  data: [1783.25989,    0.     ,  736.82942,    0.     ,
+         0.     , 1788.32666,  574.68033,    0.     ,
          0.     ,    0.     ,    1.     ,    0.     ]

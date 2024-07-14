@@ -34,6 +34,7 @@
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <tf2_ros/message_filter.h>
 #include <tf2_ros/transform_listener.h>
+#include <visualization_msgs/MarkerArray.h>
 #include <thread>
 #include <vector>
 #include <random>
@@ -82,6 +83,7 @@ public:
 
   static Eigen::MatrixXd jacobianFunc(const Eigen::VectorXd &x, const double &dt, const double &last_second);
   static Eigen::MatrixXd jacobianFunc(const Eigen::VectorXd &x);
+  void publishMarkers(const rm_msgs::TrackData& track_data);
 
 private:
   rm_msgs::TargetDetectionArray target_array_;
@@ -104,12 +106,10 @@ private:
 
   // Initial KF matrices
   KalmanFilterMatrices kf_matrices_;
-  ExtendedKalmanFilterMatrices ekf_matrices_;
   double dt_;
 
   // Armor tracker
   std::unique_ptr<Tracker> tracker_;
-  std::unique_ptr<EKFTracker> ekf_tracker_;
   bool tracking_{};
 
   bool dynamic_reconfig_initialized_ = false;
@@ -214,10 +214,20 @@ private:
   int deque_len_ = 200;
   double max_delta_t_ = 0.3;
 
-  bool kf_type_;
+  // draw history target
+  std::deque<std::pair<cv::Point2f,ros::Time>> target2d_his_;
+  ros::Time stamp_;
 
-  double integralCalculation(double &amplitude, double &angular_frequency, double &theta, double &offset,
-                             double &last_second, double &dt);
+  // Calculate the indefine-velocity
+  vector<finalTarget> vel_buf_;
+
+  // Visualization marker publisher
+  visualization_msgs::Marker position_marker_;
+  visualization_msgs::Marker linear_v_marker_;
+  visualization_msgs::Marker angular_v_marker_;
+  visualization_msgs::Marker armors_marker_;
+  ros::Publisher marker_pub_;
+
 };
 
 } // namespace rm_forecast

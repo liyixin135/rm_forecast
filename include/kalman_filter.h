@@ -6,6 +6,8 @@
 #define RM_FORECAST_KALMAN_FILTER_H
 
 #include <Eigen/Dense>
+#include <dynamic_reconfigure/server.h>
+#include <rm_forecast/KfConfig.h>
 
 namespace rm_forecast
 {
@@ -22,6 +24,7 @@ namespace rm_forecast
     {
     public:
         explicit KalmanFilter(const KalmanFilterMatrices & matrices);
+        KalmanFilter() = default;
 
         // Initialize the filter with a guess for initial states.
         void init(const Eigen::VectorXd & x0);
@@ -32,7 +35,33 @@ namespace rm_forecast
         // Update the estimated state based on measurement
         Eigen::MatrixXd update(const Eigen::VectorXd & z);
 
+        void initReconfigure();
+
     private:
+        void reconfigCB(rm_forecast::KfConfig& config, uint32_t level)
+        {
+          if (!dynamic_reconfig_initialized_)
+          {
+            config.q_element = 0;
+            config.q_value = Q.diagonal()(0);
+            config.r_element = 0;
+            config.r_value = R.diagonal()(0);
+            dynamic_reconfig_initialized_ = true;
+          }
+          if (q_element_last != config.q_element)
+          {
+            q_element_last = config.q_element;
+            config.q_value = Q.diagonal()(config.q_element);
+          }
+          if (r_element_last != config.r_element)
+          {
+            r_element_last = config.r_element;
+            config.r_value = R.diagonal()(config.r_element);
+          }
+          Q.diagonal()(config.q_element) = config.q_value;
+          R.diagonal()(config.r_element) = config.r_value;
+        };
+
         // Invariant matrices
         Eigen::MatrixXd F, H, Q, R;
 
@@ -54,6 +83,12 @@ namespace rm_forecast
         Eigen::VectorXd x_pre;
         // Updated state
         Eigen::VectorXd x_post;
+
+        // Reconfigure
+        dynamic_reconfigure::Server<rm_forecast::KfConfig>* reconf_server_;
+        int dynamic_reconfig_initialized_{};
+        int q_element_last;
+        int r_element_last;
     };
 
     struct ExtendedKalmanFilterMatrices
