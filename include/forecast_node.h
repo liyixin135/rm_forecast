@@ -86,12 +86,12 @@ public:
   void publishMarkers(const rm_msgs::TrackData& track_data);
 
 private:
+  cv::Mat raw_img_;
   rm_msgs::TargetDetectionArray target_array_;
   ros::Subscriber points_targets_sub_;
   ros::Publisher debug_pub_;
   ros::Publisher track_pub_;
   ros::NodeHandle nh_;
-  std::shared_ptr<image_transport::ImageTransport> it_;
   dynamic_reconfigure::Server<rm_forecast::ForecastConfig> *forecast_cfg_srv_{};
   dynamic_reconfigure::Server<rm_forecast::ForecastConfig>::CallbackType
       forecast_cfg_cb_;
@@ -123,12 +123,14 @@ private:
   double cutoff_frequency_ = -1;
 
   /// draw reproject
-  void drawCallback(const sensor_msgs::ImageConstPtr &img);
+  void imgCallback(const sensor_msgs::ImageConstPtr& img, const sensor_msgs::CameraInfoConstPtr& info);
+  void drawCallback();
 
   template <typename T>
   bool initMatrix(Eigen::MatrixXd &matrix, std::vector<T> &vector);
 
-  ros::Subscriber draw_sub_;
+  image_transport::CameraSubscriber img_sub_;
+  std::shared_ptr<image_transport::ImageTransport> it_;
   image_transport::Publisher draw_pub_;
 
   bool is_reproject_;
@@ -171,9 +173,9 @@ private:
 
   cv::Point2f reproject(Eigen::Vector3d &xyz);
 
-  cv::Matx33f cam_intrinsic_mat_k_;
+  cv::Matx33d cam_intrinsic_mat_k_;
   //    std::vector<double> dist_coefficients_;
-  cv::Matx<float, 1, 5> dist_coefficients_;
+  cv::Matx<double, 1, 5> dist_coefficients_;
 
   bool is_clockwise_;
   double fan_length_; // 大符臂长(R字中心至装甲板中心)

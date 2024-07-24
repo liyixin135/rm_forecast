@@ -142,10 +142,6 @@ void Forecast_Node::initialize(ros::NodeHandle &nh) {
   if (!nh.getParam("/forecast/distortion_coefficients/data", distortion))
     ROS_WARN("No distortion specified");
 
-  Eigen::MatrixXd mat_intrinsic(3, 3);
-  initMatrix(mat_intrinsic, intrinsic);
-  eigen2cv(mat_intrinsic, m_intrinsic_);
-
   cam_intrinsic_mat_k_ = cv::Matx<float, 3, 3>(
       intrinsic[0], intrinsic[1], intrinsic[2], intrinsic[3], intrinsic[4],
       intrinsic[5], intrinsic[6], intrinsic[7], intrinsic[8]);
@@ -154,8 +150,9 @@ void Forecast_Node::initialize(ros::NodeHandle &nh) {
       cv::Matx<float, 1, 5>(distortion[0], distortion[1], distortion[2],
                             distortion[3], distortion[4]);
 
-  draw_sub_ = nh.subscribe("/hk_camera/image_raw", 1,
-                           &Forecast_Node::drawCallback, this);
+  it_ = make_shared<image_transport::ImageTransport>(nh_);
+  img_sub_ = it_->subscribeCamera("/hk_camera/image_raw", 100,
+                           &Forecast_Node::imgCallback, this);
   draw_pub_ = it_->advertise("reproject_image", 1);
 }
 
@@ -559,6 +556,8 @@ void Forecast_Node::pointsCallback(
 
   debug_pub_.publish(debug_result);
 
+  drawCallback();
+
   try {
     geometry_msgs::TransformStamped transform = tf_buffer_->lookupTransform(
         "odom", pose_in.header.frame_id, msg->header.stamp, ros::Duration(1));
@@ -725,29 +724,36 @@ std::vector<double> Forecast_Node::calcAimingAngleOffset(Target &object,
  */
 cv::Point2f Forecast_Node::reproject(Eigen::Vector3d &xyz) {
   Eigen::Matrix3d mat_intrinsic;
-  cv2eigen(m_intrinsic_, mat_intrinsic);
+  cv2eigen(cam_intrinsic_mat_k_, mat_intrinsic);
   //(u,v,1)^T = (1/Z) * K * (X,Y,Z)^T
   auto result = (1.f / xyz[2]) * mat_intrinsic * (xyz); // 解算前进行单位转换
   return cv::Point2f(result[0], result[1]);
 }
 
-void Forecast_Node::drawCallback(const sensor_msgs::ImageConstPtr &img) {
+void Forecast_Node::imgCallback(const sensor_msgs::ImageConstPtr &img, const sensor_msgs::CameraInfoConstPtr &info)
+{
+  memcpy(cam_intrinsic_mat_k_.val, info->K.data(), 9 * sizeof(double));
+  memcpy(dist_coefficients_.val, info->D.data(), 5 * sizeof(double));
+  raw_img_ = cv_bridge::toCvShare(img, "bgr8")->image;
+}
+
+void Forecast_Node::drawCallback() {
   if (!is_reproject_)
     return;
 
-  cv::Mat origin_img = cv_bridge::toCvShare(img, "bgr8")->image;
-  circle(origin_img, target2d_, 10, cv::Scalar(0, 255, 0), -1, 2);
+  cv::Mat img = raw_img_.clone();
+  circle(img, target2d_, 10, cv::Scalar(0, 255, 0), -1, 2);
   if (target2d_his_.size() == tracking_threshold_) {
     for (auto &target_2d_en : target2d_his_) {
       if (abs((target_2d_en.second - stamp_).toSec()) <
           delay_time_) {
-        circle(origin_img, target_2d_en.first, 10, cv::Scalar(255, 255, 0), -1, 2);
+        circle(img, target_2d_en.first, 10, cv::Scalar(255, 255, 0), -1, 2);
         break;
       }
     }
   }
   draw_pub_.publish(
-      cv_bridge::CvImage(std_msgs::Header(), "bgr8", origin_img).toImageMsg());
+      cv_bridge::CvImage(std_msgs::Header(), "bgr8", img).toImageMsg());
 }
 
 template <typename T>
