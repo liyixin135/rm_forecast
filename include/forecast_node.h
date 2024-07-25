@@ -42,10 +42,6 @@
 using namespace std;
 
 namespace rm_forecast {
-struct InfoTarget {
-  ros::Time stamp;
-  float angle;
-};
 
 struct Target {
   std::vector<float> points;
@@ -81,8 +77,6 @@ public:
 
   void onInit() override;
 
-  static Eigen::MatrixXd jacobianFunc(const Eigen::VectorXd &x, const double &dt, const double &last_second);
-  static Eigen::MatrixXd jacobianFunc(const Eigen::VectorXd &x);
   void publishMarkers(const rm_msgs::TrackData& track_data);
 
 private:
@@ -126,20 +120,18 @@ private:
   void imgCallback(const sensor_msgs::ImageConstPtr& img, const sensor_msgs::CameraInfoConstPtr& info);
   void drawCallback();
 
-  template <typename T>
-  bool initMatrix(Eigen::MatrixXd &matrix, std::vector<T> &vector);
 
   image_transport::CameraSubscriber img_sub_;
   std::shared_ptr<image_transport::ImageTransport> it_;
   image_transport::Publisher draw_pub_;
 
-  bool is_reproject_;
+  bool is_reproject_, is_prev_reproject_;
 
   cv::Mat m_intrinsic_;
 
-  bool updateFan(Target &object, const InfoTarget &prev_target);
+  bool updateFan(Target &objectt);
 
-  void speedSolution(InfoTarget &prev_target);
+  void speedSolution();
 
   float getAngle();
 
@@ -148,13 +140,10 @@ private:
   Target prev_fan_{};
   Target last_fan_{};
   double speed_{};
-  double last_kal_speed_{};
   double skip_frame_{};
   double skip_frame_threshold_{};
   double angle_{};
   double x_angle_{};
-  double y_angle_{};
-  double actual_frame_angle_{};
   double frame_angle_{};
   double theta_offset_{};
 
@@ -168,13 +157,14 @@ private:
 
   Target pnp(const std::vector<cv::Point2f> &points_pic);
 
+  std::vector<cv::Point2f> sortPoints(const int32_t* data);
+
   std::vector<double> calcAimingAngleOffset(Target &object, double params[4],
                                             double t0, double t1, int mode);
 
   cv::Point2f reproject(Eigen::Vector3d &xyz);
 
   cv::Matx33d cam_intrinsic_mat_k_;
-  //    std::vector<double> dist_coefficients_;
   cv::Matx<double, 1, 5> dist_coefficients_;
 
   bool is_clockwise_;
@@ -190,14 +180,6 @@ private:
   double high_acceleration_offset_;
   double low_acceleration_offset_;
 
-  double init_second_;
-  double last_second_;
-  double amplitude_;
-  double angular_frequency_;
-  double theta_;
-  double offset_;
-//  double faiz_;
-
   bool is_static_;
 
   int plus_num_ = 0;
@@ -207,9 +189,6 @@ private:
   geometry_msgs::Point last_detection_temp_{};
   geometry_msgs::Vector3 last_velocity_temp_{};
   cv::Point2f target2d_{};
-  cv::Point2f r2d_{};
-  cv::Point2f last_target2d_{};
-  cv::Point2f last_r2d_{};
 
   std::deque<finalTarget> history_info_;
   bool is_filled_up_ = false;

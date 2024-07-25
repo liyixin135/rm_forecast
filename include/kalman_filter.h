@@ -11,9 +11,10 @@
 
 namespace rm_forecast
 {
+    using EigenFunc = std::function<Eigen::MatrixXd(const Eigen::VectorXd&)>;
     struct KalmanFilterMatrices
     {
-        Eigen::MatrixXd F;  // state transition matrix
+        EigenFunc F;  // state transition matrix
         Eigen::MatrixXd H;  // measurement matrix
         Eigen::MatrixXd Q;  // process noise covariance matrix
         Eigen::MatrixXd R;  // measurement noise covariance matrix
@@ -30,7 +31,7 @@ namespace rm_forecast
         void init(const Eigen::VectorXd & x0);
 
         // Computes a predicted state
-        Eigen::MatrixXd predict(const Eigen::MatrixXd & F);
+        Eigen::MatrixXd predict();
 
         // Update the estimated state based on measurement
         Eigen::MatrixXd update(const Eigen::VectorXd & z);
@@ -63,7 +64,8 @@ namespace rm_forecast
         };
 
         // Invariant matrices
-        Eigen::MatrixXd F, H, Q, R;
+        EigenFunc F;
+        Eigen::MatrixXd H, Q, R;
 
         // Priori error estimate covariance matrix
         Eigen::MatrixXd P_pre;
@@ -89,53 +91,6 @@ namespace rm_forecast
         int dynamic_reconfig_initialized_{};
         int q_element_last;
         int r_element_last;
-    };
-
-    struct ExtendedKalmanFilterMatrices
-    {
-        Eigen::MatrixXd F;    // state transition matrix
-        Eigen::MatrixXd J_H;  // measurement matrix
-        Eigen::MatrixXd Q;    // process noise covariance matrix
-        Eigen::MatrixXd R;    // measurement noise covariance matrix
-        Eigen::MatrixXd P;    // error estimate covariance matrix
-    };
-
-    class ExtendedKalmanFilter
-    {
-    public:
-        explicit ExtendedKalmanFilter(const ExtendedKalmanFilterMatrices & matrices);
-
-        // Initialize the filter with a guess for initial states.
-        void init(const Eigen::VectorXd & x0);
-
-        // Computes a predicted state
-        Eigen::MatrixXd predict(const Eigen::MatrixXd & F);
-
-        // Update the estimated state based on measurement
-        Eigen::MatrixXd update(const Eigen::VectorXd & z, const Eigen::MatrixXd & J_H);
-
-    private:
-        // Invariant matrices
-        Eigen::MatrixXd F, J_H, Q, R;
-
-        // Priori error estimate covariance matrix
-        Eigen::MatrixXd P_pre;
-        // Posteriori error estimate covariance matrix
-        Eigen::MatrixXd P_post;
-
-        // Kalman gain
-        Eigen::MatrixXd K;
-
-        // System dimensions
-        int n;
-
-        // N-size identity
-        Eigen::MatrixXd I;
-
-        // Predicted state
-        Eigen::VectorXd x_pre;
-        // Updated state
-        Eigen::VectorXd x_post;
     };
 
 }  // namespace rm_forecast
