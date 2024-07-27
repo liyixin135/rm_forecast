@@ -41,7 +41,7 @@ void Forecast_Node::initialize(ros::NodeHandle& nh)
     Eigen::MatrixXd f(3, 3);
     // clang-format off
     f << 1,  dt_,  0,
-      0,  1,  dt_,
+      0,  1,  0,
       0,  0,  1;
     // clang-format on
     return f;
@@ -68,6 +68,10 @@ void Forecast_Node::initialize(ros::NodeHandle& nh)
 
   if (!nh.getParam("max_match_distance", max_match_distance_))
     ROS_WARN("No max match distance specified");
+  if (!nh.getParam("max_match_distance", max_match_angle_))
+    ROS_WARN("No max match angle specified");
+  if (!nh.getParam("track_threshold", track_threshold_))
+    ROS_WARN("No track threshold specified");
   if (!nh.getParam("tracking_threshold", tracking_threshold_))
     ROS_WARN("No tracking threshold specified");
   if (!nh.getParam("lost_threshold", lost_threshold_))
@@ -215,15 +219,15 @@ void Forecast_Node::speedSolution()
 {
   float angle_dif = getAngle();
 
-  if (angle_dif > 0.2 || angle_dif < 0)
-  {
-    skip_flag_ = true;
-    angle_dif = 0.05;
-  }
-  if (isnan(angle_dif))
-  {
-    angle_dif = 0.05;
-  }
+  //  if (angle_dif > 0.2 || angle_dif < 0)
+  //  {
+  //    skip_flag_ = true;
+  //    angle_dif = 0.05;
+  //  }
+  //  if (isnan(angle_dif))
+  //  {
+  //    angle_dif = 0.05;
+  //  }
 
   //  filter_.input(angle, prev_target.stamp);
   //  angle = filter_.output();
@@ -270,17 +274,12 @@ float Forecast_Node::getAngle()
 
 void Forecast_Node::pointsCallback(const rm_msgs::TargetDetectionArray::Ptr& msg)
 {
+  rm_msgs::TargetDetection debug_result;
   rm_msgs::TrackData track_data;
   track_data.header.frame_id = "odom";
   track_data.header.stamp = msg->header.stamp;
   track_data.id = 0;
   stamp_ = msg->header.stamp;
-
-  if (msg->detections.empty() || msg->detections[0].id == 0)
-  {
-    track_pub_.publish(track_data);
-    return;
-  }
 
   /// R标与扇页中心
   for (auto& object : msg->detections)
@@ -314,35 +313,44 @@ void Forecast_Node::pointsCallback(const rm_msgs::TargetDetectionArray::Ptr& msg
     //    memcpy(&data[8], &detection.pose.position.x, sizeof(int32_t) * 2);
   }
 
-  std::vector<Point2f> pic_points = sortPoints(data);
-
-  Target hit_target = pnp(pic_points);
+  bool detect{};
+  Target hit_target;
+  if (msg->detections.empty() || msg->detections[0].id == 0)
+  {
+    //    track_pub_.publish(track_data);
+    //    return;
+  }
+  else
+  {
+    detect = true;
+    std::vector<Point2f> pic_points = sortPoints(data);
+    hit_target = pnp(pic_points);
+  }
 
   if (tracker_->tracker_state == Tracker::LOST)
   {
-    tracker_->init(0.1, 0, 0);
+    angle_ = 0.1;
+    tracker_->init(0.1, 0, 0, detect);
     //            target_msg.tracking = false;
     tracking_ = false;
+    debug_result.id = tracker_->tracker_state;
+    track_pub_.publish(track_data);
+    debug_pub_.publish(debug_result);
+    last_time_ = msg->header.stamp;
+    return;
   }
   /***是其他状态则更新tracker***/
   else
   {
     // Set dt
     dt_ = (msg->header.stamp - last_time_).toSec();
-    // Update state
-    if (skip_flag_)
-    {
-      dt_ = 0.018;
-      skip_flag_ = false;
-    }
-    if (abs(dt_) > 0.3)
-    {
-      dt_ = 0.018;
-    }
+    last_time_ = msg->header.stamp;
 
-    tracker_->update(angle_, max_match_distance_, tracking_threshold_, lost_threshold_);
+    tracker_->update(angle_, max_match_angle_, track_threshold_, lost_threshold_, detect);
     tracking_ = true;
   }
+
+  debug_result.id = tracker_->tracker_state;
 
   if (!tracking_)
     return;
@@ -471,10 +479,10 @@ void Forecast_Node::pointsCallback(const rm_msgs::TargetDetectionArray::Ptr& msg
   }
   vec_in.z = 0;
 
-  rm_msgs::TargetDetection debug_result;
   debug_result.pose.position.x = tracker_->target_state(1);
   debug_result.pose.position.y = tracker_->target_state(2);
   debug_result.pose.position.z = hit_point[2];
+  debug_result.pose.orientation.x = tracker_->target_state(0);
   debug_result.pose.orientation.y = params[3];
   debug_result.pose.orientation.z = frame_angle_;
   debug_result.pose.orientation.w = (tracker_->target_state(2) + low_acceleration_offset_);
@@ -528,7 +536,6 @@ void Forecast_Node::pointsCallback(const rm_msgs::TargetDetectionArray::Ptr& msg
   //  track_data.target_vel.z = 0;
   track_pub_.publish(track_data);
   publishMarkers(track_data);
-  last_time_ = msg->header.stamp;
 }
 
 std::vector<cv::Point2f> Forecast_Node::sortPoints(const int32_t* data)

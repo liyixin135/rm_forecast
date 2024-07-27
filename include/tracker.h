@@ -35,10 +35,10 @@ public:
   //        using Armors = auto_aim_interfaces::msg::Armors; /***？？***/
   //        using Armor = auto_aim_interfaces::msg::Armor;
 
-  void init(const float &angle, const float &speed, const float &q_speed);
+  void init(const float &angle, const float &speed, const float &q_speed, bool detect);
 
-  void update(const float &angle, const double &max_match_distance,
-              const int &tracking_threshold, const int &lost_threshold);
+  void update(const double &angle, const double &max_match_distance,
+              const int &tracking_threshold, const int &lost_threshold, bool detect);
 
   enum State {
     LOST,
@@ -47,10 +47,7 @@ public:
     TEMP_LOST,
   } tracker_state;
 
-  char tracking_id;
   Eigen::VectorXd target_state;
-
-  double min_distance_ = 800;
 
   int detect_count_;
   int lost_count_;
@@ -59,6 +56,7 @@ public:
 
 private:
   KalmanFilterMatrices kf_matrices_;
+  ros::Publisher debug_pub_;
 
   Eigen::Vector3d tracking_velocity_;
 };

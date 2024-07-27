@@ -20,6 +20,11 @@ namespace rm_forecast
 
     void KalmanFilter::init(const Eigen::VectorXd & x0) { x_post = x0; } /***赋值上一个时刻的估计值***/
 
+    void KalmanFilter::setState(const Eigen::VectorXd& x0)
+    {
+      x_post = x0;
+    }
+
     Eigen::MatrixXd KalmanFilter::predict()
     {
         auto F_matrix = this->F(x_post);

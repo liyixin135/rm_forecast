@@ -60,10 +60,6 @@ struct finalTarget {
   double z;
 };
 
-static double max_match_distance_{};
-static int tracking_threshold_{};
-static int lost_threshold_{};
-
 class Forecast_Node : public nodelet::Nodelet {
 public:
   Forecast_Node() : filter_(cutoff_frequency_) {}
@@ -80,6 +76,12 @@ public:
   void publishMarkers(const rm_msgs::TrackData& track_data);
 
 private:
+  double max_match_distance_{};
+  double max_match_angle_{};
+  int tracking_threshold_{};
+  int track_threshold_{};
+  int lost_threshold_{};
+
   cv::Mat raw_img_;
   rm_msgs::TargetDetectionArray target_array_;
   ros::Subscriber points_targets_sub_;

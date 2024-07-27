@@ -30,6 +30,8 @@ namespace rm_forecast
         // Initialize the filter with a guess for initial states.
         void init(const Eigen::VectorXd & x0);
 
+        void setState(const Eigen::VectorXd& x0);
+
         // Computes a predicted state
         Eigen::MatrixXd predict();
 

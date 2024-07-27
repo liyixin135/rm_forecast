@@ -1,6 +1,8 @@
 max_match_distance: 2.9
+max_match_angle: 0.1
 tracking_threshold: 200
-lost_threshold: 5
+track_threshold: 1
+lost_threshold: 8
 
 pos_q: 1000
 vel_q: 1400
