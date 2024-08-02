@@ -45,12 +45,15 @@ namespace rm_forecast
 
       debug_result.pose.position.x = angle;
       debug_result.pose.position.y = target_state(0);
+      debug_result.pose.position.z = abs(angle - target_state(0));
 
       if (abs(angle - target_state(0)) > max_match_distance)
       {
+        debug_result.id = 0;
         /// 扇页跳变
         target_state(0) = angle;
         kf_.setState(target_state);
+        detect = false;
       }
       else
       {

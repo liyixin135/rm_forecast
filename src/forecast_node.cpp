@@ -40,8 +40,8 @@ void Forecast_Node::initialize(ros::NodeHandle& nh)
   auto f = [this](const Eigen::VectorXd&) {
     Eigen::MatrixXd f(3, 3);
     // clang-format off
-    f << 1,  dt_,  0,
-      0,  1,  0,
+    f << 1,  dt_,  0.5*dt_*dt_,
+      0,  1,  dt_,
       0,  0,  1;
     // clang-format on
     return f;
@@ -52,13 +52,20 @@ void Forecast_Node::initialize(ros::NodeHandle& nh)
   Eigen::Matrix<double, 1, 3> h;
   h << 1, 0, 0; /***把矩阵左上角3x3赋值为对角为1其余为0***/
 
-  // Q - process noise covariance matrix
+  // clang-format off
+  auto q_v = nh.param("q", std::vector<double>{
+  // angle vel accel
+  0.01, 0.5, 0.1 });
   Eigen::DiagonalMatrix<double, 3> q;
-  q.diagonal() << 0.01, 0.1, 0.1;
+  q.diagonal() << q_v[0], q_v[1], q_v[2];
 
   // R - measurement noise covariance matrix
+  auto r_v = nh.param("r", std::vector<double>{
+  // angle
+  1 });
   Eigen::DiagonalMatrix<double, 1> r;
-  r.diagonal() << 1;
+  r.diagonal() << r_v[0];
+  // clang-format on
 
   // P - error estimate covariance matrix
   Eigen::DiagonalMatrix<double, 3, 3> p;
@@ -68,7 +75,7 @@ void Forecast_Node::initialize(ros::NodeHandle& nh)
 
   if (!nh.getParam("max_match_distance", max_match_distance_))
     ROS_WARN("No max match distance specified");
-  if (!nh.getParam("max_match_distance", max_match_angle_))
+  if (!nh.getParam("max_match_angle", max_match_angle_))
     ROS_WARN("No max match angle specified");
   if (!nh.getParam("track_threshold", track_threshold_))
     ROS_WARN("No track threshold specified");
@@ -219,16 +226,6 @@ void Forecast_Node::speedSolution()
 {
   float angle_dif = getAngle();
 
-  //  if (angle_dif > 0.2 || angle_dif < 0)
-  //  {
-  //    skip_flag_ = true;
-  //    angle_dif = 0.05;
-  //  }
-  //  if (isnan(angle_dif))
-  //  {
-  //    angle_dif = 0.05;
-  //  }
-
   //  filter_.input(angle, prev_target.stamp);
   //  angle = filter_.output();
 
@@ -314,7 +311,7 @@ void Forecast_Node::pointsCallback(const rm_msgs::TargetDetectionArray::Ptr& msg
   }
 
   bool detect{};
-  Target hit_target;
+
   if (msg->detections.empty() || msg->detections[0].id == 0)
   {
     //    track_pub_.publish(track_data);
@@ -324,13 +321,14 @@ void Forecast_Node::pointsCallback(const rm_msgs::TargetDetectionArray::Ptr& msg
   {
     detect = true;
     std::vector<Point2f> pic_points = sortPoints(data);
-    hit_target = pnp(pic_points);
+    hit_target_ = pnp(pic_points);
   }
 
   if (tracker_->tracker_state == Tracker::LOST)
   {
     angle_ = 0.1;
     tracker_->init(0.1, 0, 0, detect);
+    history_info_.clear();
     //            target_msg.tracking = false;
     tracking_ = false;
     debug_result.id = tracker_->tracker_state;
@@ -348,6 +346,14 @@ void Forecast_Node::pointsCallback(const rm_msgs::TargetDetectionArray::Ptr& msg
 
     tracker_->update(angle_, max_match_angle_, track_threshold_, lost_threshold_, detect);
     tracking_ = true;
+  }
+
+  if (tracker_->tracker_state == Tracker::TEMP_LOST)
+    temp_lost_time_ = (msg->header.stamp - tlost_start_).toSec();
+  else
+  {
+    tlost_start_ = msg->header.stamp;
+    temp_lost_time_ = 0;
   }
 
   debug_result.id = tracker_->tracker_state;
@@ -403,6 +409,7 @@ void Forecast_Node::pointsCallback(const rm_msgs::TargetDetectionArray::Ptr& msg
     if (history_info_.size() < tracking_threshold_)
     {
       history_info_.push_back(final_target);
+      is_filled_up_ = false;
       //    last_target = target;
       //    return false;
     }
@@ -422,7 +429,7 @@ void Forecast_Node::pointsCallback(const rm_msgs::TargetDetectionArray::Ptr& msg
     {
       for (int i = 0; i < history_info_.size(); i++)
       {
-        if (abs((history_info_[i].stamp - msg->header.stamp).toSec()) < max_match_distance_)
+        if (abs((history_info_[i].stamp - msg->header.stamp).toSec()) < max_match_distance_ - delay_time_)
         {
           params[3] = history_info_[i].speed;
           break;
@@ -434,7 +441,7 @@ void Forecast_Node::pointsCallback(const rm_msgs::TargetDetectionArray::Ptr& msg
       for (auto& w : history_info_)
       {
         if (abs((w.stamp - msg->header.stamp).toSec()) > max_match_distance_ &&
-            abs((w.stamp - msg->header.stamp).toSec()) < max_match_distance_ + delay_time_)
+            abs((w.stamp - msg->header.stamp).toSec()) < max_match_distance_ - delay_time_)
         {
           vel_buf_.push_back(w);
         }
@@ -446,9 +453,9 @@ void Forecast_Node::pointsCallback(const rm_msgs::TargetDetectionArray::Ptr& msg
     params[3] = 0.05;
 
   double t0 = 0;
-  double t1 = delay_time_;
+  double t1 = delay_time_ + temp_lost_time_;
   int mode = 0;
-  std::vector<double> hit_point = calcAimingAngleOffset(hit_target, params, t0, t1, mode);
+  std::vector<double> hit_point = calcAimingAngleOffset(hit_target_, params, t0, t1, mode);
 
   rm_msgs::TargetDetection detection_temp;
   detection_temp.pose.position.x = hit_point[0];
@@ -484,8 +491,7 @@ void Forecast_Node::pointsCallback(const rm_msgs::TargetDetectionArray::Ptr& msg
   debug_result.pose.position.z = hit_point[2];
   debug_result.pose.orientation.x = tracker_->target_state(0);
   debug_result.pose.orientation.y = params[3];
-  debug_result.pose.orientation.z = frame_angle_;
-  debug_result.pose.orientation.w = (tracker_->target_state(2) + low_acceleration_offset_);
+  debug_result.pose.orientation.z = frame_angle_ / dt_;
 
   debug_pub_.publish(debug_result);
 
@@ -494,7 +500,7 @@ void Forecast_Node::pointsCallback(const rm_msgs::TargetDetectionArray::Ptr& msg
   try
   {
     geometry_msgs::TransformStamped transform =
-        tf_buffer_->lookupTransform("odom", pose_in.header.frame_id, ros::Time::now(), ros::Duration(1));
+        tf_buffer_->lookupTransform("odom", pose_in.header.frame_id, msg->header.stamp, ros::Duration(1));
 
     tf2::doTransform(vec_in, vec_out, transform);
   }
@@ -506,7 +512,7 @@ void Forecast_Node::pointsCallback(const rm_msgs::TargetDetectionArray::Ptr& msg
   try
   {
     geometry_msgs::TransformStamped transform =
-        tf_buffer_->lookupTransform("odom", pose_in.header.frame_id, ros::Time::now(), ros::Duration(1));
+        tf_buffer_->lookupTransform("odom", pose_in.header.frame_id, msg->header.stamp, ros::Duration(1));
 
     tf2::doTransform(pose_in.pose, pose_out.pose, transform);
   }

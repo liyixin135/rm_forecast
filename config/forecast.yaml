@@ -1,8 +1,8 @@
-max_match_distance: 2.9
+max_match_distance: 2.97
 max_match_angle: 0.1
 tracking_threshold: 200
 track_threshold: 1
-lost_threshold: 8
+lost_threshold: 10
 
 pos_q: 1000
 vel_q: 1400
@@ -15,7 +15,7 @@ fan_length: 0.75
 #target_length: 0.4
 #target_width: 0.44
 angular_velocity: 0.3511
-delay_time: 0.32
+delay_time: 0.25
 speed_threshold: 1.3
 high_acceleration_coefficient: 0.
 low_acceleration_coefficient: 0.5
@@ -25,3 +25,6 @@ skip_frame_threshold: 1
 
 is_static: False
 is_small_buff: True
+
+q: [0.01, 0.8, 0.1]
+r: [1]

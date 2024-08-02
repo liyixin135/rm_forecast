@@ -99,6 +99,8 @@ private:
 
   // Last time received msg
   ros::Time last_time_;
+  ros::Time tlost_start_;
+  double temp_lost_time_;
 
   // Initial KF matrices
   KalmanFilterMatrices kf_matrices_;
@@ -107,6 +109,8 @@ private:
   // Armor tracker
   std::unique_ptr<Tracker> tracker_;
   bool tracking_{};
+
+  Target hit_target_;
 
   bool dynamic_reconfig_initialized_ = false;
   void forecastconfigCB(rm_forecast::ForecastConfig &config, uint32_t level);

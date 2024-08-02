@@ -51,7 +51,7 @@ namespace rm_forecast
     void KalmanFilter::initReconfigure()
     {
       // Init dynamic reconfigure
-      reconf_server_ = new dynamic_reconfigure::Server<rm_forecast::KfConfig>(ros::NodeHandle("~/kf_config"));
+      reconf_server_ = new dynamic_reconfigure::Server<rm_forecast::KfConfig>(ros::NodeHandle("/forecast/kf_config"));
       dynamic_reconfigure::Server<rm_forecast::KfConfig>::CallbackType cb = boost::bind(&KalmanFilter::reconfigCB, this, _1, _2);
       reconf_server_->setCallback(cb);
     }
